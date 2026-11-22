@@ -36,7 +36,7 @@ class RolesTest extends TestCase
             ->assertSee('Roles')
             ->assertSee('Add new role')
             ->assertSee('No roles yet.')
-            ->assertSee('New tab');
+            ->assertSee('Open in new tab', false);
     }
 
     public function test_a_saved_role_appears_on_the_list(): void

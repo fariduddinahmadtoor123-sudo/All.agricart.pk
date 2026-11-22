@@ -23,11 +23,17 @@ class ColorsTest extends TestCase
         $this->actingAs($user)
             ->get('/colors')
             ->assertOk()
-            ->assertSee('Colors')
+            ->assertSee('Appearance')
             ->assertSee('Sand')
             ->assertSee('Forest')
             ->assertSee('Add new color')
-            ->assertSee('New tab')
+            ->assertSee('Corners')
+            ->assertSee('Square')
+            ->assertSee('Soft')
+            ->assertSee('Round')
+            ->assertSee('Smooth')
+            ->assertSee('Pill')
+            ->assertSee('Open in new tab', false)
             ->assertSee('Edit')
             ->assertSee('Delete')
             ->assertSee('Apply');
@@ -97,7 +103,7 @@ class ColorsTest extends TestCase
             ->assertOk()
             ->assertSee('Edit color')
             ->assertSee('Dawn')
-            ->assertSeeInOrder(['Edit color', 'Home']);
+            ->assertSeeInOrder(['Edit color', 'Dashboard']);
     }
 
     public function test_a_user_updates_a_color_scheme(): void

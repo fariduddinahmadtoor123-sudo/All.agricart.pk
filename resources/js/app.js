@@ -1,3 +1,54 @@
+const arrowRefreshers = [];
+
+const refreshArrowPanes = () => {
+    arrowRefreshers.forEach((update) => update());
+};
+
+const bindArrowPanes = (root = document) => {
+    root.querySelectorAll('[data-arrow-pane]').forEach((pane) => {
+        if (pane.dataset.arrowBound === 'true') {
+            return;
+        }
+
+        const scroller = pane.querySelector('[data-arrow-scroll]');
+        const up = pane.querySelector('[data-scroll-up]');
+        const down = pane.querySelector('[data-scroll-down]');
+
+        if (! scroller || ! up || ! down) {
+            return;
+        }
+
+        const update = () => {
+            const overflow = scroller.scrollHeight - scroller.clientHeight > 2;
+
+            up.hidden = ! overflow || scroller.scrollTop <= 2;
+            down.hidden = ! overflow || scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 2;
+        };
+
+        const move = (direction) => {
+            scroller.scrollBy({
+                top: direction * Math.max(72, scroller.clientHeight * 0.7),
+                behavior: 'smooth',
+            });
+        };
+
+        up.addEventListener('click', () => move(-1));
+        down.addEventListener('click', () => move(1));
+        scroller.addEventListener('scroll', update);
+        arrowRefreshers.push(update);
+        pane.dataset.arrowBound = 'true';
+        update();
+    });
+};
+
+bindArrowPanes();
+
+const arrowObserver = new ResizeObserver(() => refreshArrowPanes());
+
+document.querySelectorAll('[data-arrow-scroll]').forEach((scroller) => arrowObserver.observe(scroller));
+
+window.refreshDeskArrowPanes = refreshArrowPanes;
+
 const stage = document.getElementById('desk-stage');
 const dock = document.getElementById('desk-dock');
 
@@ -17,13 +68,28 @@ if (stage && dock) {
 
     const place = (win) => {
         const box = stageBox();
-        const width = Math.max(320, Math.min(560, box.width - 48));
-        const height = Math.max(280, Math.min(640, box.height - 48));
+        const gutter = box.width < 640 ? 10 : 20;
+        const maxWidth = Math.max(280, box.width - gutter * 2);
+        const maxHeight = Math.max(280, box.height - gutter * 2);
+        const width = box.width < 720
+            ? maxWidth
+            : Math.min(maxWidth, Math.max(640, Math.round(maxWidth * 0.78)));
 
+        win.hidden = false;
         win.style.width = `${width}px`;
+        win.style.height = `${Math.min(maxHeight, 640)}px`;
+
+        const scroller = win.querySelector('[data-arrow-scroll]');
+        const body = scroller?.firstElementChild;
+        const bar = win.querySelector('.desk-window-bar');
+        const contentHeight = body?.scrollHeight || scroller?.scrollHeight || 420;
+        const chrome = (bar?.offsetHeight || 40) + 24;
+        const height = Math.min(maxHeight, Math.max(box.width < 640 ? 400 : 560, contentHeight + chrome));
+
         win.style.height = `${height}px`;
         win.style.left = `${box.left + Math.max(0, (box.width - width) / 2)}px`;
         win.style.top = `${box.top + Math.max(0, (box.height - height) / 2)}px`;
+        remember(win);
     };
 
     const fitMax = (win) => {
@@ -75,13 +141,23 @@ if (stage && dock) {
             win.style.height = win.dataset.height;
         }
 
-        const maxButton = win.querySelector('[data-window-max]');
+        setMaxIcons(win, false);
+        raise(win);
+        requestAnimationFrame(refreshArrowPanes);
+    };
 
-        if (maxButton) {
-            maxButton.textContent = 'Max';
+    const setMaxIcons = (win, maximized) => {
+        const maxButton = win.querySelector('[data-window-max]');
+        const maxIcon = win.querySelector('[data-window-max-icon]');
+        const restoreIcon = win.querySelector('[data-window-restore-icon]');
+
+        if (! maxButton || ! maxIcon || ! restoreIcon) {
+            return;
         }
 
-        raise(win);
+        maxButton.setAttribute('aria-label', maximized ? 'Restore' : 'Maximize');
+        maxIcon.hidden = maximized;
+        restoreIcon.hidden = ! maximized;
     };
 
     const minimize = (win) => {
@@ -91,6 +167,7 @@ if (stage && dock) {
 
         win.classList.remove('is-max');
         win.hidden = true;
+        setMaxIcons(win, false);
         chipFor(win);
     };
 
@@ -103,30 +180,53 @@ if (stage && dock) {
         win.classList.add('is-max');
         fitMax(win);
         chipFor(win);
-
-        const maxButton = win.querySelector('[data-window-max]');
-
-        if (maxButton) {
-            maxButton.textContent = 'Restore';
-        }
-
+        setMaxIcons(win, true);
         raise(win);
+        requestAnimationFrame(refreshArrowPanes);
     };
 
     const close = (win) => {
         win.hidden = true;
         win.classList.remove('is-max');
+        setMaxIcons(win, false);
         dock.querySelector(`[data-dock="${win.id}"]`)?.remove();
+        delete win.dataset.placed;
+        delete win.dataset.left;
+        delete win.dataset.top;
+        delete win.dataset.width;
+        delete win.dataset.height;
     };
 
     const open = (win) => {
-        if (!win.dataset.placed) {
+        win.hidden = false;
+
+        if (! win.dataset.placed) {
             place(win);
             win.dataset.placed = 'true';
         }
 
         restore(win);
         chipFor(win);
+        requestAnimationFrame(() => {
+            if (! win.classList.contains('is-max') && win.dataset.placed === 'true') {
+                const box = stageBox();
+                const scroller = win.querySelector('[data-arrow-scroll]');
+                const body = scroller?.firstElementChild;
+                const bar = win.querySelector('.desk-window-bar');
+                const maxHeight = Math.max(280, box.height - (box.width < 640 ? 16 : 24));
+                const contentHeight = body?.scrollHeight || scroller?.scrollHeight || 0;
+                const chrome = (bar?.offsetHeight || 40) + 24;
+                const fitted = Math.min(maxHeight, Math.max(parseFloat(win.style.height) || 0, contentHeight + chrome));
+
+                if (fitted > (parseFloat(win.style.height) || 0) + 2) {
+                    win.style.height = `${fitted}px`;
+                    win.style.top = `${box.top + Math.max(0, (box.height - fitted) / 2)}px`;
+                    remember(win);
+                }
+            }
+
+            refreshArrowPanes();
+        });
     };
 
     document.querySelectorAll('[data-window]').forEach((win) => {
@@ -191,17 +291,18 @@ if (stage && dock) {
 
                 const move = (moveEvent) => {
                     if (edge.includes('e')) {
-                        win.style.width = `${Math.max(320, startWidth + moveEvent.clientX - startX)}px`;
+                        win.style.width = `${Math.max(360, startWidth + moveEvent.clientX - startX)}px`;
                     }
 
                     if (edge.includes('s')) {
-                        win.style.height = `${Math.max(280, startHeight + moveEvent.clientY - startY)}px`;
+                        win.style.height = `${Math.max(360, startHeight + moveEvent.clientY - startY)}px`;
                     }
                 };
 
                 const stop = () => {
                     handle.removeEventListener('pointermove', move);
                     handle.removeEventListener('pointerup', stop);
+                    refreshArrowPanes();
                 };
 
                 handle.addEventListener('pointermove', move);
@@ -210,6 +311,7 @@ if (stage && dock) {
         });
 
         win.addEventListener('pointerdown', () => raise(win));
+        win.querySelector('[data-arrow-scroll]') && arrowObserver.observe(win.querySelector('[data-arrow-scroll]'));
 
         if (!win.hidden) {
             open(win);
@@ -304,6 +406,32 @@ const clearScheme = () => {
 document.querySelectorAll('[data-scheme-id]').forEach((button) => {
     button.addEventListener('click', () => applyScheme(button));
 });
+
+const markCorners = (value) => {
+    document.querySelectorAll('[data-corner]').forEach((button) => {
+        button.setAttribute('aria-pressed', button.dataset.corner === value ? 'true' : 'false');
+    });
+};
+
+const applyCorners = (value) => {
+    const root = document.documentElement;
+
+    if (value === 'round') {
+        delete root.dataset.corners;
+        localStorage.removeItem('desk-corners');
+    } else {
+        root.dataset.corners = value;
+        localStorage.setItem('desk-corners', value);
+    }
+
+    markCorners(value);
+};
+
+document.querySelectorAll('[data-corner]').forEach((button) => {
+    button.addEventListener('click', () => applyCorners(button.dataset.corner));
+});
+
+markCorners(document.documentElement.dataset.corners || 'round');
 
 const savedScheme = localStorage.getItem('desk-scheme');
 const schemeList = document.querySelector('[data-scheme-list]');

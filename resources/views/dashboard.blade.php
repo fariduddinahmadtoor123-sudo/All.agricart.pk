@@ -1,4 +1,4 @@
-<x-layouts.shell title="Home" :user="$user">
+<x-layouts.shell title="Dashboard" :user="$user">
     <h1 class="text-4xl font-semibold">Welcome, {{ $user->name }}.</h1>
     <p class="mt-3 max-w-xl text-lg leading-8">Trading, the store, and business sit in this one desk.</p>
 

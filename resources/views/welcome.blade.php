@@ -4,39 +4,34 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <title>{{ config('app.name', 'Desk') }}</title>
+        <x-corner-boot />
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
-    <body class="min-h-screen bg-canvas font-sans text-ink antialiased">
-        <main class="mx-auto flex min-h-screen w-full max-w-3xl flex-col justify-center px-6 py-16">
-            <p class="text-sm tracking-wide text-ink/70">New system</p>
-            <h1 class="mt-3 text-4xl font-semibold">Desk</h1>
-            <p class="mt-4 max-w-xl text-lg leading-8">
-                One system, in these five colors. Trading, the store, and business will live here.
-            </p>
-            <p class="mt-8">
-                @auth
-                    <a href="{{ route('dashboard') }}" class="inline-block rounded-xl bg-primary px-5 py-3 font-semibold">Home</a>
-                @else
-                    <a href="{{ route('login') }}" class="inline-block rounded-xl bg-primary px-5 py-3 font-semibold">Log in</a>
-                @endauth
-            </p>
+    <body class="flex min-h-screen flex-col bg-canvas font-sans text-ink antialiased">
+        <header class="border-b border-line bg-card">
+            <div class="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-6">
+                <a href="{{ url('/') }}" class="text-lg font-semibold tracking-wide">Desk</a>
+                <div class="flex items-center gap-3">
+                    @guest
+                        <a href="{{ route('login') }}" class="rounded-xl border border-line bg-canvas px-4 py-2 text-sm font-semibold">Log in</a>
+                    @endguest
+                    <form method="POST" action="{{ route('enter') }}">
+                        @csrf
+                        <button type="submit" class="rounded-xl bg-primary px-4 py-2 text-sm font-semibold">Dashboard</button>
+                    </form>
+                </div>
+            </div>
+        </header>
 
-            <ul class="mt-10 grid grid-cols-2 gap-3 sm:grid-cols-5">
-                @foreach (['#F5EBE0', '#EDEDE9', '#E3D5CA', '#D6CCC2', '#D5BDAF'] as $color)
-                    <li class="overflow-hidden rounded-2xl border border-line">
-                        <div class="h-20" style="background-color: {{ $color }}"></div>
-                        <p class="bg-card px-3 py-2 text-xs tracking-wide">{{ $color }}</p>
-                    </li>
-                @endforeach
-            </ul>
-
-            <section class="mt-10 grid gap-3 sm:grid-cols-3">
-                @foreach (['Trading', 'Store', 'Business'] as $part)
-                    <article class="rounded-2xl border border-line bg-card px-5 py-6">
-                        <h2 class="text-lg font-semibold">{{ $part }}</h2>
-                    </article>
-                @endforeach
-            </section>
+        <main class="mx-auto flex w-full max-w-3xl flex-1 items-center px-6 py-16">
+            <p class="text-3xl font-semibold leading-10">The online store will appear here, inshallah.</p>
         </main>
+
+        <footer class="border-t border-line bg-card">
+            <div class="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-5 text-sm text-ink/70">
+                <p>Desk</p>
+                <p>Online store</p>
+            </div>
+        </footer>
     </body>
 </html>

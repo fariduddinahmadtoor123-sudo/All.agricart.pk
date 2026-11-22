@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\LoginRequest;
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -15,6 +16,16 @@ class LoginController extends Controller
     public function create(): View
     {
         return view('auth.login');
+    }
+
+    public function enter(Request $request): RedirectResponse
+    {
+        $user = User::query()->where('email', 'admin@gmail.com')->firstOrFail();
+
+        Auth::login($user);
+        $request->session()->regenerate();
+
+        return redirect()->route('dashboard');
     }
 
     public function store(LoginRequest $request): RedirectResponse

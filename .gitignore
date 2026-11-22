@@ -22,6 +22,8 @@
 /storage/pail
 /database/*.sqlite*
 /vendor
+__pycache__/
+*.pyc
 _ide_helper.php
 Homestead.json
 Homestead.yaml

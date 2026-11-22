@@ -1,4 +1,4 @@
-@props(['title', 'user'])
+@props(['title', 'user', 'fit' => false, 'heading' => true])
 
 <!DOCTYPE html>
 <html lang="en">
@@ -32,14 +32,16 @@
                 }
             })();
         </script>
+        <x-corner-boot />
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
     <body class="flex h-screen flex-col bg-canvas font-sans text-ink antialiased">
-        <header class="flex h-16 shrink-0 items-center justify-between border-b border-line bg-card px-6">
-            <div class="flex items-center gap-4">
+        <header class="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-line bg-card px-3 sm:px-6">
+            <div class="flex min-w-0 items-center gap-3">
                 <x-section-tag number="1" name="Top" />
                 <p class="text-lg font-semibold tracking-wide">Desk</p>
                 @php
+                    $moduleLabel = \App\Support\DeskMenu::labelForRoute(request()->route()?->getName());
                     $crumbs = match (true) {
                         request()->routeIs('roles.create') => [
                             ['label' => 'Settings', 'route' => 'settings'],
@@ -52,17 +54,17 @@
                         ],
                         request()->routeIs('colors.create') => [
                             ['label' => 'Settings', 'route' => 'settings'],
-                            ['label' => 'Colors', 'route' => 'colors'],
+                            ['label' => 'Appearance', 'route' => 'colors'],
                             ['label' => 'New color'],
                         ],
                         request()->routeIs('colors.edit') => [
                             ['label' => 'Settings', 'route' => 'settings'],
-                            ['label' => 'Colors', 'route' => 'colors'],
+                            ['label' => 'Appearance', 'route' => 'colors'],
                             ['label' => 'Edit color'],
                         ],
                         request()->routeIs('colors') => [
                             ['label' => 'Settings', 'route' => 'settings'],
-                            ['label' => 'Colors'],
+                            ['label' => 'Appearance'],
                         ],
                         request()->routeIs('notes.create') => [
                             ['label' => 'Docs'],
@@ -81,15 +83,50 @@
                         request()->routeIs('settings') => [
                             ['label' => 'Settings'],
                         ],
-                        request()->routeIs('forex') => [
-                            ['label' => 'Forex'],
+                        request()->routeIs('forex.mt5-accounts.create') => [
+                            ['label' => 'Forex Trading', 'route' => 'forex.market-watch'],
+                            ['label' => 'MT5 accounts', 'route' => 'forex.mt5-accounts'],
+                            ['label' => 'New MT5 account'],
+                        ],
+                        request()->routeIs('forex.mt5-accounts*') => [
+                            ['label' => 'Forex Trading', 'route' => 'forex.market-watch'],
+                            ['label' => 'MT5 accounts'],
+                        ],
+                        request()->routeIs('forex.client-accounts.create') => [
+                            ['label' => 'Forex Trading', 'route' => 'forex.market-watch'],
+                            ['label' => 'Client accounts', 'route' => 'forex.client-accounts'],
+                            ['label' => 'Open account'],
+                        ],
+                        request()->routeIs('forex.client-accounts*') => [
+                            ['label' => 'Forex Trading', 'route' => 'forex.market-watch'],
+                            ['label' => 'Client accounts'],
+                        ],
+                        request()->routeIs('forex.ledger.create') => [
+                            ['label' => 'Forex Trading', 'route' => 'forex.market-watch'],
+                            ['label' => 'Ledger', 'route' => 'forex.ledger'],
+                            ['label' => 'Post entry'],
+                        ],
+                        request()->routeIs('forex.ledger*') => [
+                            ['label' => 'Forex Trading', 'route' => 'forex.market-watch'],
+                            ['label' => 'Ledger'],
+                        ],
+                        request()->routeIs('forex.watch') => [
+                            ['label' => 'Forex Trading', 'route' => 'forex.market-watch'],
+                            ['label' => 'Market Watch'],
+                        ],
+                        request()->routeIs('forex*') => [
+                            ['label' => 'Forex Trading', 'route' => 'forex.market-watch'],
+                            ['label' => 'Trade Terminal'],
+                        ],
+                        is_string($moduleLabel) => [
+                            ['label' => $moduleLabel],
                         ],
                         default => [
-                            ['label' => 'Home'],
+                            ['label' => 'Dashboard'],
                         ],
                     };
                 @endphp
-                <nav aria-label="Breadcrumb" class="flex items-center gap-2 text-sm">
+                <nav aria-label="Breadcrumb" class="flex min-w-0 items-center gap-2 truncate text-sm">
                     @foreach ($crumbs as $crumb)
                         <span aria-hidden="true">/</span>
                         @isset($crumb['route'])
@@ -100,43 +137,71 @@
                     @endforeach
                 </nav>
             </div>
-            <div class="flex items-center gap-4">
-                <p class="text-sm">{{ $user->name }}</p>
+            <div class="flex shrink-0 items-center gap-2 sm:gap-4">
+                <p class="hidden text-sm sm:block">{{ $user->name }}</p>
                 <form method="POST" action="{{ route('logout') }}">
                     @csrf
-                    <button type="submit" class="rounded-xl border border-line bg-canvas px-4 py-2 text-sm font-semibold">Log out</button>
+                    <button type="submit" class="rounded-xl border border-line bg-canvas px-3 py-1.5 text-sm font-semibold">Log out</button>
                 </form>
             </div>
         </header>
 
         <div class="flex min-h-0 flex-1">
-            <nav id="side-menu" class="side-menu flex shrink-0 flex-col gap-1 border-r border-line bg-card p-2" aria-label="Side" data-pinned="false">
-                <x-side-link :href="route('dashboard')" :current="request()->routeIs('dashboard')">Home</x-side-link>
-                <x-side-link :href="route('forex')" :current="request()->routeIs('forex')">Forex</x-side-link>
-                <x-side-link :href="route('settings')" :current="request()->routeIs('settings', 'roles*', 'colors*')">Settings</x-side-link>
-                <x-side-link :href="route('notes')" :current="request()->routeIs('notes*')">Docs</x-side-link>
-                <button type="button" id="side-pin" class="side-pin mt-auto rounded-xl px-4 py-3 text-left text-sm hover:bg-soft">Keep open</button>
-            </nav>
+            <div id="side-rail" class="side-rail flex shrink-0 flex-col border-r border-line bg-card p-2" data-pinned="false">
+                <button type="button" id="side-pin" class="mb-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl hover:bg-soft" aria-label="Keep open" title="Keep open" aria-pressed="false">
+                    <svg viewBox="0 0 16 16" class="h-4 w-4" aria-hidden="true">
+                        <rect x="1.5" y="2" width="13" height="12" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"></rect>
+                        <path d="M6 2.2v11.6" stroke="currentColor" stroke-width="1.4"></path>
+                    </svg>
+                </button>
+                <button type="button" id="side-up" class="side-arrow" hidden aria-label="Menus above">
+                    <svg viewBox="0 0 16 16" class="h-4 w-4" aria-hidden="true">
+                        <path d="M3.5 10.5 8 6l4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path>
+                    </svg>
+                </button>
+                <nav id="side-menu" class="side-menu flex min-h-0 flex-1 flex-col gap-1" aria-label="Side">
+                @foreach (\App\Support\DeskMenu::items() as $item)
+                    <x-side-link :href="route($item['route'], $item['parameters'])" :current="\App\Support\DeskMenu::isCurrent($item)">
+                        {{ $item['label'] }}
+                        @if ($item['soon'])
+                            <span class="text-[10px] font-semibold tracking-wide text-ink/50">Soon</span>
+                        @endif
+                    </x-side-link>
+                @endforeach
+                </nav>
+                <button type="button" id="side-down" class="side-arrow" hidden aria-label="Menus below">
+                    <svg viewBox="0 0 16 16" class="h-4 w-4" aria-hidden="true">
+                        <path d="M3.5 5.5 8 10l4.5-4.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path>
+                    </svg>
+                </button>
+            </div>
 
             <div class="flex min-w-0 flex-1 flex-col">
                 @php
                     $submenuGroup = match (true) {
                         request()->routeIs('settings', 'roles*', 'colors*') => 'settings',
                         request()->routeIs('notes*') => 'docs',
-                        request()->routeIs('forex') => 'forex',
+                        request()->routeIs('forex*') => 'forex',
                         default => 'home',
                     };
                     $submenus = [
                         'settings' => [
                             ['route' => 'roles', 'label' => 'Roles', 'active' => 'roles*'],
-                            ['route' => 'colors', 'label' => 'Colors', 'active' => 'colors*'],
+                            ['route' => 'colors', 'label' => 'Appearance', 'active' => 'colors*'],
                         ],
                         'docs' => [
                             ['route' => 'notes', 'label' => 'Notes', 'active' => 'notes*'],
                         ],
+                        'forex' => [
+                            ['route' => 'forex.watch', 'label' => 'Market Watch', 'active' => 'forex.watch'],
+                            ['route' => 'forex.market-watch', 'label' => 'Trade Terminal', 'active' => 'forex.market-watch'],
+                            ['route' => 'forex.client-accounts', 'label' => 'Client accounts', 'active' => 'forex.client-accounts*'],
+                            ['route' => 'forex.mt5-accounts', 'label' => 'MT5 accounts', 'active' => 'forex.mt5-accounts*'],
+                            ['route' => 'forex.ledger', 'label' => 'Ledger', 'active' => 'forex.ledger*'],
+                        ],
                     ];
                 @endphp
-                <section aria-label="Menu" class="flex shrink-0 flex-wrap items-center gap-3 border-b border-line bg-soft px-6 py-3">
+                <section aria-label="Menu" class="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-soft px-3 py-2 sm:px-6">
                     <x-section-tag number="2" name="Menu" />
                     <nav aria-label="Submenu" class="flex flex-wrap gap-2">
                         @foreach ($submenus[$submenuGroup] ?? [] as $item)
@@ -153,15 +218,26 @@
                     </nav>
                 </section>
 
-                <section aria-label="{{ $title }}" class="flex h-12 shrink-0 items-center gap-4 border-b border-line bg-primary px-6">
-                    <p class="text-sm font-semibold tracking-wide">{{ $title }}</p>
+                <section aria-label="{{ $title }}" class="flex min-h-12 shrink-0 flex-wrap items-center gap-2 border-b border-line bg-primary px-3 py-1.5 sm:px-6">
+                    @if ($heading)
+                        <p class="shrink-0 text-sm font-semibold tracking-wide">{{ $title }}</p>
+                    @endif
+                    <div class="flex min-w-0 flex-1 flex-wrap items-center justify-center gap-1.5">
+                        @isset($meters)
+                            {{ $meters }}
+                        @endisset
+                    </div>
                     @isset($panel)
-                        <div class="ml-auto flex items-center gap-2">{{ $panel }}</div>
+                        <div class="flex shrink-0 items-center gap-2">{{ $panel }}</div>
                     @endisset
                 </section>
 
                 <div id="desk-stage" class="flex min-h-0 flex-1 flex-col">
-                    <main class="min-h-0 flex-1 overflow-auto px-8 py-8">
+                    <main @class([
+                        'min-h-0 flex-1',
+                        'overflow-auto px-4 py-4 sm:px-8 sm:py-6' => ! $fit,
+                        'flex flex-col overflow-hidden px-3 py-2 sm:px-4 sm:py-3' => $fit,
+                    ])>
                         {{ $slot }}
                     </main>
                 </div>
@@ -174,19 +250,53 @@
         </div>
         @stack('windows')
         <script>
+            const sideRail = document.getElementById('side-rail');
             const sideMenu = document.getElementById('side-menu');
             const sidePin = document.getElementById('side-pin');
-            const pinned = localStorage.getItem('desk-menu-pinned') === 'true';
+            const sideUp = document.getElementById('side-up');
+            const sideDown = document.getElementById('side-down');
 
-            sideMenu.dataset.pinned = pinned ? 'true' : 'false';
-            sidePin.textContent = pinned ? 'Auto close' : 'Keep open';
+            const updateArrows = () => {
+                const above = sideMenu.scrollTop > 2;
+                const below = sideMenu.scrollTop + sideMenu.clientHeight < sideMenu.scrollHeight - 2;
+
+                sideUp.hidden = ! above;
+                sideDown.hidden = ! below;
+            };
+
+            const scrollMenu = (direction) => {
+                sideMenu.scrollBy({
+                    top: direction * Math.max(72, sideMenu.clientHeight * 0.7),
+                    behavior: 'smooth',
+                });
+            };
+
+            const applyPin = (next, store) => {
+                const label = next ? 'Auto close' : 'Keep open';
+
+                sideRail.dataset.pinned = next ? 'true' : 'false';
+                sidePin.setAttribute('aria-label', label);
+                sidePin.setAttribute('title', label);
+                sidePin.setAttribute('aria-pressed', next ? 'true' : 'false');
+
+                if (store) {
+                    localStorage.setItem('desk-menu-pinned', next ? 'true' : 'false');
+                }
+
+                requestAnimationFrame(updateArrows);
+            };
+
+            applyPin(localStorage.getItem('desk-menu-pinned') === 'true', false);
 
             sidePin.addEventListener('click', () => {
-                const next = sideMenu.dataset.pinned !== 'true';
-                sideMenu.dataset.pinned = next ? 'true' : 'false';
-                sidePin.textContent = next ? 'Auto close' : 'Keep open';
-                localStorage.setItem('desk-menu-pinned', next ? 'true' : 'false');
+                applyPin(sideRail.dataset.pinned !== 'true', true);
             });
+            sideUp.addEventListener('click', () => scrollMenu(-1));
+            sideDown.addEventListener('click', () => scrollMenu(1));
+            sideMenu.addEventListener('scroll', updateArrows);
+            sideRail.addEventListener('mouseenter', () => requestAnimationFrame(updateArrows));
+            sideRail.addEventListener('transitionend', updateArrows);
+            window.addEventListener('resize', updateArrows);
         </script>
     </body>
 </html>

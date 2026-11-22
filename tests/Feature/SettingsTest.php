@@ -23,8 +23,8 @@ class SettingsTest extends TestCase
             ->get('/settings')
             ->assertOk()
             ->assertSee('Settings')
-            ->assertSee('Home')
-            ->assertSee('Forex')
-            ->assertSee('Colors');
+            ->assertSee('Dashboard')
+            ->assertSee('Forex Trading')
+            ->assertSee('Appearance');
     }
 }

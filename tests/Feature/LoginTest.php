@@ -12,7 +12,32 @@ class LoginTest extends TestCase
 
     public function test_guest_can_open_the_login_page(): void
     {
-        $this->get('/login')->assertOk()->assertSee('Log in')->assertSee('Sign in and Home opens.');
+        $this->get('/login')
+            ->assertOk()
+            ->assertSee('Log in')
+            ->assertSee('Sign in and Home opens.')
+            ->assertSee('admin@gmail.com')
+            ->assertSee('value="admin"', false);
+    }
+
+    public function test_open_dashboard_signs_in_the_admin(): void
+    {
+        User::factory()->create([
+            'name' => 'Admin',
+            'email' => 'admin@gmail.com',
+            'password' => 'admin',
+        ]);
+
+        $this->get('/')
+            ->assertOk()
+            ->assertSee('Dashboard')
+            ->assertSee('The online store will appear here, inshallah.')
+            ->assertDontSee('New system')
+            ->assertDontSee('#F5EBE0');
+
+        $this->post('/enter')->assertRedirect('/dashboard');
+
+        $this->get('/dashboard')->assertOk()->assertSee('Welcome, Admin.');
     }
 
     public function test_guest_is_sent_to_login_from_the_dashboard(): void
