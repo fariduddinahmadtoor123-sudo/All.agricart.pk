@@ -7,9 +7,11 @@ use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Modules\Forex\Models\ClientAccount;
 use Modules\Forex\Models\Mt5Account;
+use Modules\Forex\Models\Mt5Command;
 use Modules\Forex\Models\Mt5Quote;
 use Modules\Forex\Models\Position;
 use Modules\Forex\Support\MarketWatch;
+use Modules\Forex\Support\Trading;
 use Tests\TestCase;
 
 class ForexTradingTest extends TestCase
@@ -164,7 +166,8 @@ class ForexTradingTest extends TestCase
     public function test_buy_opens_one_buy_at_the_typed_quantity(): void
     {
         $user = User::factory()->create();
-        $this->seedLiveQuote('XAUUSD', 2654.30, 2654.62, 2);
+        $feed = $this->seedLiveQuote('XAUUSD', 2654.30, 2654.62, 2);
+        $this->attachTerminal($user, $feed);
 
         $this->actingAs($user)
             ->post(route('forex.positions.open'), [
@@ -189,7 +192,8 @@ class ForexTradingTest extends TestCase
     public function test_sell_opens_one_sell_at_the_typed_quantity(): void
     {
         $user = User::factory()->create();
-        $this->seedLiveQuote('EURUSD', 1.08542, 1.08554, 5);
+        $feed = $this->seedLiveQuote('EURUSD', 1.08542, 1.08554, 5);
+        $this->attachTerminal($user, $feed);
 
         $this->actingAs($user)
             ->post(route('forex.positions.open'), [
@@ -278,6 +282,22 @@ class ForexTradingTest extends TestCase
     public function test_pending_orders_appear_in_the_orders_panel(): void
     {
         $user = User::factory()->create();
+        $feed = Mt5Account::query()->create([
+            'name' => 'Live',
+            'broker' => 'Demo',
+            'server' => 'Demo',
+            'login' => '88001',
+            'active' => true,
+            'last_seen_at' => now(),
+        ]);
+        $this->attachTerminal($user, $feed);
+        Mt5Quote::query()->create([
+            'mt5_account_id' => $feed->id,
+            'symbol' => 'EURUSD',
+            'bid' => 1.10,
+            'ask' => 1.1002,
+            'tick_at' => now(),
+        ]);
 
         $this->actingAs($user)
             ->post(route('forex.orders.pending'), [
@@ -300,6 +320,94 @@ class ForexTradingTest extends TestCase
             ->assertSee($pending->desk_ticket)
             ->assertSee('Buy Limit')
             ->assertSee('Cancel pending '.$pending->desk_ticket);
+    }
+
+    public function test_a_sell_limit_below_the_market_is_refused(): void
+    {
+        $user = User::factory()->create();
+        $feed = Mt5Account::query()->create([
+            'name' => 'Live',
+            'broker' => 'Demo',
+            'server' => 'Demo',
+            'login' => '88002',
+            'active' => true,
+            'last_seen_at' => now(),
+        ]);
+        $this->attachTerminal($user, $feed);
+        Mt5Quote::query()->create([
+            'mt5_account_id' => $feed->id,
+            'symbol' => 'XAUUSD',
+            'bid' => 3673,
+            'ask' => 3673.2,
+            'tick_at' => now(),
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('forex.orders.pending'), [
+                'symbol' => 'XAUUSD',
+                'order_type' => 'sell_limit',
+                'quantity' => '0.01',
+                'trigger_price' => '3672',
+            ])
+            ->assertRedirect(route('forex.market-watch'))
+            ->assertSessionHasErrors('trade');
+
+        $this->assertSame(0, Position::query()->where('user_id', $user->id)->count());
+    }
+
+    public function test_a_stop_loss_on_the_wrong_side_is_refused(): void
+    {
+        $user = User::factory()->create();
+        $feed = Mt5Account::query()->create([
+            'name' => 'Live',
+            'broker' => 'Demo',
+            'server' => 'Demo',
+            'login' => '88003',
+            'active' => true,
+            'last_seen_at' => now(),
+        ]);
+        $this->attachTerminal($user, $feed);
+        Mt5Quote::query()->create([
+            'mt5_account_id' => $feed->id,
+            'symbol' => 'EURUSD',
+            'bid' => 1.10,
+            'ask' => 1.1002,
+            'tick_at' => now(),
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('forex.orders.pending'), [
+                'symbol' => 'EURUSD',
+                'order_type' => 'buy_limit',
+                'quantity' => '0.01',
+                'trigger_price' => '1.08000',
+                'stop_loss' => '1.09000',
+            ])
+            ->assertRedirect(route('forex.market-watch'))
+            ->assertSessionHasErrors('trade');
+
+        $this->assertSame(0, Position::query()->where('user_id', $user->id)->count());
+    }
+
+    public function test_a_linked_terminal_does_not_borrow_another_brokers_rates(): void
+    {
+        $user = User::factory()->create();
+        $this->seedLiveQuote('EURUSD', 1.1111, 1.1113, 5);
+        $mine = Mt5Account::query()->create([
+            'name' => 'Funded',
+            'broker' => 'Funded',
+            'server' => 'Funded',
+            'login' => '35492202',
+            'active' => true,
+            'last_seen_at' => now(),
+        ]);
+        $this->attachTerminal($user, $mine);
+
+        $this->actingAs($user)
+            ->get(route('forex.market-watch'))
+            ->assertOk()
+            ->assertSee('Not offered by this broker')
+            ->assertDontSee('1.1111');
     }
 
     public function test_trade_terminal_uses_desk_equity_not_mt5_snapshot(): void
@@ -330,6 +438,53 @@ class ForexTradingTest extends TestCase
         $this->assertSame('3,333.33', $meters['Balance']);
         $this->assertSame('3,333.33', $meters['Equity']);
         $this->assertNotSame('12,610.20', $meters['Equity']);
+    }
+
+    public function test_equity_keeps_the_assigned_balance_and_margin_locks_the_open_order(): void
+    {
+        $user = User::factory()->create();
+        $account = ClientAccount::query()->create([
+            'number' => 'TA-100001',
+            'user_id' => $user->id,
+            'balance' => 100,
+            'leverage' => 1000,
+            'active' => true,
+        ]);
+        Position::query()->create([
+            'desk_ticket' => 'D-100001',
+            'user_id' => $user->id,
+            'client_account_id' => $account->id,
+            'symbol' => 'EURUSD',
+            'side' => 'buy',
+            'status' => Position::STATUS_OPEN,
+            'order_type' => 'market',
+            'quantity' => 0.01,
+            'entry_price' => 1.10000,
+            'mt5_ticket' => '2848193316',
+            'profit' => 2.50,
+        ]);
+
+        $meters = collect(MarketWatch::account($user))->pluck('value', 'label');
+
+        $this->assertSame('100.00', $meters['Balance']);
+        $this->assertSame('102.50', $meters['Equity']);
+        $this->assertSame('1.10', $meters['Margin']);
+        $this->assertSame('101.40', $meters['Free margin']);
+
+        $feed = $this->seedLiveQuote('XAUUSD', 3677.68, 3677.92, 2);
+        $account->update(['mt5_account_id' => $feed->id]);
+
+        $this->actingAs($user)
+            ->post(route('forex.positions.open'), [
+                'armed' => '1',
+                'symbol' => 'XAUUSD',
+                'side' => 'sell',
+                'quantity' => '1',
+            ])
+            ->assertRedirect(route('forex.market-watch'))
+            ->assertSessionHasErrors('trade');
+
+        $this->assertSame(1, Position::query()->where('user_id', $user->id)->count());
     }
 
     public function test_a_user_can_close_their_own_order_from_the_orders_panel(): void
@@ -416,7 +571,182 @@ class ForexTradingTest extends TestCase
         $this->assertSame(7420.0, (float) $account->fresh()->balance);
     }
 
-    private function seedLiveQuote(string $symbol, float $bid, float $ask, int $digits): void
+    public function test_closing_a_loss_bigger_than_the_balance_still_closes_the_order(): void
+    {
+        $user = User::factory()->create();
+        $account = ClientAccount::query()->create([
+            'number' => 'TA-100008',
+            'user_id' => $user->id,
+            'balance' => 10,
+            'active' => true,
+        ]);
+        $this->seedLiveQuote('BTCUSD', 90000, 90010, 2);
+
+        Position::query()->create([
+            'user_id' => $user->id,
+            'client_account_id' => $account->id,
+            'symbol' => 'BTCUSD',
+            'side' => 'buy',
+            'status' => 'open',
+            'quantity' => 1,
+            'entry_price' => 100000,
+            'profit' => 0,
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('forex.positions.close'), ['symbol' => 'BTCUSD', 'side' => 'all'])
+            ->assertRedirect(route('forex.market-watch'));
+
+        $closed = Position::query()->where('user_id', $user->id)->first();
+        $this->assertNotNull($closed->closed_at);
+        $this->assertSame(0.0, (float) $account->fresh()->balance);
+    }
+
+    public function test_a_login_without_a_terminal_cannot_open_a_trade(): void
+    {
+        $user = User::factory()->create();
+        $this->seedLiveQuote('BTCUSD', 61000, 61010, 2);
+
+        $this->actingAs($user)
+            ->post(route('forex.positions.open'), [
+                'armed' => '1',
+                'symbol' => 'BTCUSD',
+                'side' => 'buy',
+                'quantity' => '0.01',
+            ])
+            ->assertRedirect(route('forex.market-watch'))
+            ->assertSessionHasErrors('trade');
+
+        $this->assertSame(0, Position::query()->where('user_id', $user->id)->count());
+    }
+
+    public function test_profit_stays_zero_until_the_terminal_accepts_the_order(): void
+    {
+        $user = User::factory()->create();
+        $feed = $this->seedLiveQuote('BTCUSD', 61000, 61010, 2);
+        $this->attachTerminal($user, $feed, 100)->update(['leverage' => 1000]);
+
+        $this->actingAs($user)
+            ->post(route('forex.positions.open'), [
+                'armed' => '1',
+                'symbol' => 'BTCUSD',
+                'side' => 'buy',
+                'quantity' => '1',
+            ])
+            ->assertRedirect(route('forex.market-watch'));
+
+        $position = Position::query()->where('user_id', $user->id)->first();
+        Mt5Quote::query()->where('symbol', 'BTCUSD')->update(['bid' => 62000, 'ask' => 62010]);
+
+        app(Trading::class)->markOpen($user->fresh());
+
+        $this->assertSame(0.0, (float) $position->fresh()->profit);
+
+        $position->forceFill(['mt5_ticket' => '88991'])->save();
+        app(Trading::class)->markOpen($user->fresh());
+
+        $this->assertSame(990.0, (float) $position->fresh()->profit);
+    }
+
+    public function test_closing_from_the_terminal_answers_without_a_page_reload(): void
+    {
+        $user = User::factory()->create();
+        $position = Position::query()->create([
+            'desk_ticket' => 'D-100040',
+            'user_id' => $user->id,
+            'symbol' => 'EURUSD',
+            'side' => 'buy',
+            'status' => Position::STATUS_OPEN,
+            'order_type' => 'market',
+            'quantity' => 0.01,
+            'entry_price' => 1.1,
+            'profit' => 1,
+        ]);
+
+        $this->actingAs($user)
+            ->postJson(route('forex.orders.close', $position))
+            ->assertOk()
+            ->assertJson(['ok' => true]);
+
+        $this->assertNotNull($position->fresh()->closed_at);
+    }
+
+    public function test_closing_before_the_terminal_accepts_books_nothing(): void
+    {
+        $user = User::factory()->create();
+        $feed = $this->seedLiveQuote('BTCUSD', 61000, 61010, 2);
+        $account = $this->attachTerminal($user, $feed, 100);
+        $account->update(['leverage' => 1000]);
+
+        $this->actingAs($user)
+            ->post(route('forex.positions.open'), [
+                'armed' => '1',
+                'symbol' => 'BTCUSD',
+                'side' => 'buy',
+                'quantity' => '1',
+            ]);
+
+        $position = Position::query()->where('user_id', $user->id)->first();
+
+        $this->actingAs($user)
+            ->post(route('forex.orders.close', $position))
+            ->assertRedirect(route('forex.market-watch'));
+
+        $position->refresh();
+        $this->assertSame(Position::STATUS_CANCELLED, $position->status);
+        $this->assertSame(0.0, (float) $position->profit);
+        $this->assertSame(100.0, (float) $account->fresh()->balance);
+        $this->assertSame(0, Mt5Command::query()->where('status', 'pending')->count());
+    }
+
+    public function test_closing_a_live_terminal_order_waits_for_mt5(): void
+    {
+        $user = User::factory()->create();
+        $feed = $this->seedLiveQuote('BTCUSD', 62000, 62010, 2);
+        $account = $this->attachTerminal($user, $feed, 100);
+        $position = Position::query()->create([
+            'desk_ticket' => 'D-100030',
+            'user_id' => $user->id,
+            'client_account_id' => $account->id,
+            'symbol' => 'BTCUSD',
+            'side' => 'buy',
+            'status' => Position::STATUS_OPEN,
+            'order_type' => 'market',
+            'quantity' => 1,
+            'entry_price' => 61000,
+            'mt5_ticket' => '88991',
+            'profit' => 0,
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('forex.orders.close', $position))
+            ->assertRedirect(route('forex.market-watch'));
+
+        $position->refresh();
+        $this->assertSame(Position::STATUS_CLOSING, $position->status);
+        $this->assertNull($position->closed_at);
+        $this->assertSame(100.0, (float) $account->fresh()->balance);
+
+        app(Trading::class)->confirmClose($position, 62000);
+
+        $position->refresh();
+        $this->assertNotNull($position->closed_at);
+        $this->assertSame(1000.0, (float) $position->profit);
+        $this->assertSame(1100.0, (float) $account->fresh()->balance);
+    }
+
+    private function attachTerminal(User $user, Mt5Account $feed, float $balance = 1000): ClientAccount
+    {
+        return ClientAccount::query()->create([
+            'number' => 'TA-'.$user->id,
+            'user_id' => $user->id,
+            'mt5_account_id' => $feed->id,
+            'balance' => $balance,
+            'active' => true,
+        ]);
+    }
+
+    private function seedLiveQuote(string $symbol, float $bid, float $ask, int $digits): Mt5Account
     {
         $feed = Mt5Account::query()->create([
             'name' => 'Live',
@@ -438,6 +768,8 @@ class ForexTradingTest extends TestCase
             'digits' => $digits,
             'tick_at' => now(),
         ]);
+
+        return $feed;
     }
 
     public function test_market_sessions_follow_utc_open_order(): void

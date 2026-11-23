@@ -33,6 +33,8 @@ class StoreClientAccountRequest extends FormRequest
                 Rule::unique('forex_client_accounts', 'user_id'),
             ],
             'mt5_account_id' => ['nullable', 'integer', Rule::exists('forex_mt5_accounts', 'id')->where('active', true)],
+            'leverage' => ['required', 'integer', 'min:1', 'max:2000'],
+            'amount' => ['required', 'numeric', 'min:0', 'max:100000000'],
         ];
     }
 

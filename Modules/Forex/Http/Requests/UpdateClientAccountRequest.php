@@ -27,6 +27,7 @@ class UpdateClientAccountRequest extends FormRequest
     {
         return [
             'mt5_account_id' => ['nullable', 'integer', Rule::exists('forex_mt5_accounts', 'id')->where('active', true)],
+            'leverage' => ['required', 'integer', 'min:1', 'max:2000'],
         ];
     }
 }

@@ -59,6 +59,11 @@
                                     @csrf
                                     <button type="submit" class="rounded-xl border border-line bg-canvas px-3 py-2 text-sm font-semibold">Start connector</button>
                                 </form>
+                                <form method="POST" action="{{ route('forex.mt5-accounts.destroy', $account) }}" onsubmit="return confirm('Delete this MT5 account?')">
+                                    @csrf
+                                    @method('DELETE')
+                                    <button type="submit" class="rounded-xl border border-line bg-canvas px-3 py-2 text-sm font-semibold">Delete</button>
+                                </form>
                             </div>
                         </td>
                         <td class="px-4 py-4 sm:px-6">{{ $account->active ? 'On' : 'Off' }}</td>

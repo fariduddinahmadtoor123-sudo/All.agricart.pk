@@ -9,11 +9,14 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Modules\Forex\Models\Mt5Account;
 use Modules\Forex\Models\Mt5Quote;
+use Modules\Forex\Support\Mt5Commands;
 use Modules\Forex\Support\Symbols;
 use Modules\Forex\Support\Watchlist;
 
 class ConnectorSyncController extends Controller
 {
+    public function __construct(private Mt5Commands $commands = new Mt5Commands) {}
+
     public function __invoke(Request $request): JsonResponse
     {
         $token = $this->bearerToken($request);
@@ -129,7 +132,77 @@ class ConnectorSyncController extends Controller
                 2,
                 fn (): array => Watchlist::connectorTargets($account),
             ),
+            'commands' => $this->commands->pendingPayloads($account),
         ]);
+    }
+
+    public function commands(Request $request): JsonResponse
+    {
+        $account = $this->authorizedAccount($request);
+
+        if ($account instanceof JsonResponse) {
+            return $account;
+        }
+
+        $payloadAccountId = (string) $request->input('mt5_account_id', '');
+
+        if ($payloadAccountId === '' || $payloadAccountId !== (string) $account->id) {
+            return response()->json(['message' => 'Account mismatch.'], 422);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'commands' => $this->commands->due($account),
+            'resting' => $this->commands->resting($account),
+        ]);
+    }
+
+    public function executions(Request $request): JsonResponse
+    {
+        $token = $this->bearerToken($request);
+
+        if ($token === null) {
+            return response()->json(['message' => 'Unauthorized.'], 401);
+        }
+
+        $account = Mt5Account::query()->where('connector_token', $token)->first();
+
+        if ($account === null || ! $account->active) {
+            return response()->json(['message' => 'Unauthorized.'], 401);
+        }
+
+        $payloadAccountId = (string) $request->input('mt5_account_id', '');
+
+        if ($payloadAccountId === '' || $payloadAccountId !== (string) $account->id) {
+            return response()->json(['message' => 'Account mismatch.'], 422);
+        }
+
+        $results = $request->input('results', []);
+
+        if (! is_array($results) || count($results) > 20) {
+            return response()->json(['message' => 'Results must be a short list.'], 422);
+        }
+
+        $this->commands->apply($account, $results);
+
+        return response()->json(['ok' => true]);
+    }
+
+    private function authorizedAccount(Request $request): Mt5Account|JsonResponse
+    {
+        $token = $this->bearerToken($request);
+
+        if ($token === null) {
+            return response()->json(['message' => 'Unauthorized.'], 401);
+        }
+
+        $account = Mt5Account::query()->where('connector_token', $token)->first();
+
+        if ($account === null || ! $account->active) {
+            return response()->json(['message' => 'Unauthorized.'], 401);
+        }
+
+        return $account;
     }
 
     /**

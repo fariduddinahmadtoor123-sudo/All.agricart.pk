@@ -33,6 +33,8 @@ class Position extends Model
 
     public const STATUS_OPEN = 'open';
 
+    public const STATUS_CLOSING = 'closing';
+
     public const STATUS_CLOSED = 'closed';
 
     public const STATUS_CANCELLED = 'cancelled';

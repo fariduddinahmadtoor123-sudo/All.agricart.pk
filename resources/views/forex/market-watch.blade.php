@@ -59,9 +59,7 @@
         </div>
     </x-slot:panel>
 
-    @if ($errors->any())
-        <p class="mb-3 text-sm text-red-800">{{ $errors->first() }}</p>
-    @endif
+    <p id="trade-alert" class="mb-3 text-sm text-red-800" @if (! $errors->any()) hidden @endif>{{ $errors->first() }}</p>
 
     <div id="watch-board" class="flex min-h-0 flex-1 flex-col gap-2 xl:flex-row">
     <div id="watch-main" class="flex min-h-0 min-w-0 flex-[1.6] flex-col gap-2">
@@ -129,7 +127,9 @@
                     >
                         <td class="px-2 py-1 font-semibold">
                             <span>{{ $quote['symbol'] }}</span>
-                            @if (! $quote['broker_open'])
+                            @if (! ($quote['offered'] ?? true))
+                                <span class="mt-0.5 block text-[10px] font-medium text-red-800" data-q="broker-note">Not offered by this broker</span>
+                            @elseif (! $quote['broker_open'])
                                 <span class="mt-0.5 block text-[10px] font-medium text-red-800" data-q="broker-note">Broker closed — no rates</span>
                             @endif
                         </td>
@@ -232,10 +232,8 @@
                 'history' => 'No closed orders.',
             ] as $list => $empty)
                 <div data-order-panel="{{ $list }}" @if ($list !== 'open') hidden @endif>
-                    @if ($orders[$list] === [])
-                        <p class="px-3 py-3 text-xs text-ink/70">{{ $empty }}</p>
-                    @else
-                        <table class="w-max min-w-full whitespace-nowrap text-left text-xs">
+                    <p class="px-3 py-3 text-xs text-ink/70" data-order-empty @if ($orders[$list] !== []) hidden @endif>{{ $empty }}</p>
+                    <table class="w-max min-w-full whitespace-nowrap text-left text-xs" @if ($orders[$list] === []) hidden @endif>
                             <thead class="sticky top-0 bg-soft">
                                 <tr>
                                     <th class="px-2 py-1.5 font-semibold" scope="col">Ticket</th>
@@ -264,10 +262,17 @@
                                     @endif
                                 </tr>
                             </thead>
-                            <tbody>
+                            <tbody data-order-body="{{ $list }}">
                                 @foreach ($orders[$list] as $order)
                                     <tr class="border-t border-line" data-order-row="{{ $order['id'] }}">
-                                        <td class="px-2 py-1 font-semibold tabular-nums">{{ $order['ticket'] }}</td>
+                                        <td class="px-2 py-1 font-semibold tabular-nums">
+                                            <span data-q="ticket">{{ $order['ticket'] }}</span>
+                                            <span
+                                                class="mt-0.5 block text-[10px] font-medium text-ink/60"
+                                                data-q="mt5"
+                                                @if ($order['mt5'] === '' && ! $order['mt5_waiting'] && ! $order['mt5_closing']) hidden @endif
+                                            >{{ $order['mt5'] !== '' ? 'MT5 '.$order['mt5'] : ($order['mt5_closing'] ? 'Closing on MT5' : 'MT5 pending') }}{{ $order['mt5_error'] !== '' ? '. '.$order['mt5_error'] : '' }}</span>
+                                        </td>
                                         <td class="px-2 py-1 font-semibold">{{ $order['symbol'] }}</td>
                                         <td class="px-2 py-1">{{ $order['type'] }}</td>
                                         <td class="px-2 py-1">{{ $order['side'] }}</td>
@@ -316,11 +321,14 @@
                                         @endif
                                         @if ($list !== 'pending')
                                             <td class="px-2 py-1 text-right tabular-nums">{{ $order['commission'] }}</td>
-                                            <td @class([
-                                                'px-2 py-1 text-right font-semibold tabular-nums',
-                                                'text-emerald-800' => str_starts_with($order['profit'], '+'),
-                                                'text-red-800' => str_starts_with($order['profit'], '-'),
-                                            ])>{{ $order['profit'] }}</td>
+                                            <td
+                                                data-q="profit"
+                                                @class([
+                                                    'px-2 py-1 text-right font-semibold tabular-nums',
+                                                    'text-emerald-800' => str_starts_with($order['profit'], '+'),
+                                                    'text-red-800' => str_starts_with($order['profit'], '-'),
+                                                ])
+                                            >{{ $order['profit'] }}</td>
                                         @endif
                                         <td class="px-2 py-1 text-right tabular-nums">{{ $order['time'] }}</td>
                                         @if ($list === 'open')
@@ -360,7 +368,6 @@
                                 @endforeach
                             </tbody>
                         </table>
-                    @endif
                 </div>
             @endforeach
         </div>
@@ -411,6 +418,7 @@
                     Price
                     <input type="number" name="trigger_price" value="" min="0" step="any" required class="h-7 rounded-lg border border-line bg-canvas px-2 text-xs tabular-nums text-ink">
                 </label>
+                <p class="text-[11px] text-ink/60">Buy limit and sell stop sit below the price. Sell limit and buy stop sit above it.</p>
                 <div class="grid grid-cols-2 gap-2">
                     <label class="grid gap-1 text-[11px] text-ink/70">
                         S/L
@@ -609,18 +617,13 @@
                 const boxes = [...fastArms()];
                 const armed = boxes.filter((item) => item.checked).length;
 
-                if (armed === 0) {
-                    applyFastMode(false);
-                } else if (armed < boxes.length) {
-                    fastMaster.indeterminate = true;
-                } else {
-                    fastMaster.indeterminate = false;
-                }
+                fastMaster.indeterminate = armed > 0 && armed < boxes.length;
             });
         });
 
         applyFastMode(localStorage.getItem(FAST_KEY) === '1', false);
 
+        document.addEventListener('DOMContentLoaded', () => {
         const wishlistForm = document.getElementById('wishlist-form');
         const wishlistList = document.getElementById('wishlist-ordered');
 
@@ -690,11 +693,16 @@
             refreshWishlistAddButtons();
         };
 
-        wishlistList?.querySelectorAll('[data-symbol]').forEach((row) => bindWishlistRow(row));
+        if (! wishlistForm || ! wishlistList) {
+            return;
+        }
+
+        wishlistList.querySelectorAll('[data-symbol]').forEach((row) => bindWishlistRow(row));
         document.querySelectorAll('[data-wl-add]').forEach((button) => {
             button.addEventListener('click', () => addWishlistSymbol(button.dataset.wlAdd));
         });
         refreshWishlistAddButtons();
+        });
 
         document.querySelectorAll('[data-order-tab]').forEach((tab) => {
             tab.addEventListener('click', () => {
@@ -923,7 +931,11 @@
 
                 let note = row.querySelector('[data-q="broker-note"]');
 
-                if (quote.broker_open === false) {
+                const missing = quote.offered === false
+                    ? 'Not offered by this broker'
+                    : (quote.broker_open === false ? 'Broker closed — no rates' : '');
+
+                if (missing !== '') {
                     if (! note) {
                         note = document.createElement('span');
                         note.dataset.q = 'broker-note';
@@ -931,8 +943,8 @@
                         row.querySelector('td')?.appendChild(note);
                     }
 
-                    note.textContent = 'Broker closed — no rates';
-                } else if (note) {
+                    note.textContent = missing;
+                } else if (note && (quote.offered === true || quote.broker_open === true)) {
                     note.remove();
                 }
 
@@ -989,7 +1001,214 @@
             }
 
             paintTicks(payload, ! bridgeLive);
+            paintOrders(payload);
         };
+
+        const tradeToken = () => document.querySelector('input[name="_token"]')?.value || '';
+
+        const tradeText = (value) => String(value ?? '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;');
+
+        const orderNote = (order) => {
+            const label = order.mt5
+                ? `MT5 ${order.mt5}`
+                : (order.mt5_closing ? 'Closing on MT5' : (order.mt5_waiting ? 'MT5 pending' : ''));
+
+            if (label === '') {
+                return '';
+            }
+
+            return order.mt5_error ? `${label}. ${order.mt5_error}` : label;
+        };
+
+        const orderRowHtml = (order, list) => {
+            const note = orderNote(order);
+            const profitClass = String(order.profit || '').startsWith('+')
+                ? ' text-emerald-800'
+                : (String(order.profit || '').startsWith('-') ? ' text-red-800' : '');
+            const levels = order.can_edit_levels
+                ? `<td class="px-2 py-1" colspan="2">
+                        <form method="POST" action="/forex/market-watch/orders/${order.id}/levels" class="flex items-center justify-end gap-1">
+                            <input type="hidden" name="_token" value="${tradeText(tradeToken())}">
+                            <input type="number" name="stop_loss" value="${tradeText(order.stop_loss_raw)}" min="0" step="any" inputmode="decimal" placeholder="S/L" class="h-6 w-16 rounded-lg border border-line bg-canvas px-1 text-right text-xs tabular-nums text-ink outline-none focus:border-ink/40" aria-label="Stop loss for ${tradeText(order.ticket)}">
+                            <input type="number" name="take_profit" value="${tradeText(order.take_profit_raw)}" min="0" step="any" inputmode="decimal" placeholder="T/P" class="h-6 w-16 rounded-lg border border-line bg-canvas px-1 text-right text-xs tabular-nums text-ink outline-none focus:border-ink/40" aria-label="Take profit for ${tradeText(order.ticket)}">
+                            <button type="submit" class="grid h-6 place-items-center rounded-lg border border-line bg-canvas px-2 text-[10px] font-semibold text-ink hover:bg-soft" aria-label="Save levels for ${tradeText(order.ticket)}">Set</button>
+                        </form>
+                    </td>`
+                : `<td class="px-2 py-1 text-right tabular-nums">${tradeText(order.stop_loss)}</td><td class="px-2 py-1 text-right tabular-nums">${tradeText(order.take_profit)}</td>`;
+            const history = list === 'history'
+                ? `<td class="px-2 py-1 text-right tabular-nums">${tradeText(order.close)}</td><td class="px-2 py-1">${tradeText(order.result)}</td>`
+                : '';
+            const money = list === 'pending'
+                ? ''
+                : `<td class="px-2 py-1 text-right tabular-nums">${tradeText(order.commission)}</td><td data-q="profit" class="px-2 py-1 text-right font-semibold tabular-nums${profitClass}">${tradeText(order.profit)}</td>`;
+            const action = list === 'open'
+                ? `<td class="px-2 py-1 text-center"><form method="POST" action="/forex/market-watch/orders/${order.id}/close"><input type="hidden" name="_token" value="${tradeText(tradeToken())}"><button type="submit" class="grid h-6 w-6 place-items-center rounded-lg border border-line bg-canvas text-ink hover:bg-soft" aria-label="Close order ${tradeText(order.ticket)}" title="Close order"><svg viewBox="0 0 16 16" class="h-3 w-3" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg></button></form></td>`
+                : (list === 'pending'
+                    ? `<td class="px-2 py-1 text-center"><form method="POST" action="/forex/market-watch/orders/${order.id}/cancel"><input type="hidden" name="_token" value="${tradeText(tradeToken())}"><button type="submit" class="grid h-6 w-6 place-items-center rounded-lg border border-line bg-canvas text-ink hover:bg-soft" aria-label="Cancel pending ${tradeText(order.ticket)}" title="Cancel pending"><svg viewBox="0 0 16 16" class="h-3 w-3" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg></button></form></td>`
+                    : '');
+
+            return `<tr class="border-t border-line" data-order-row="${order.id}">
+                <td class="px-2 py-1 font-semibold tabular-nums"><span data-q="ticket">${tradeText(order.ticket)}</span><span class="mt-0.5 block text-[10px] font-medium text-ink/60" data-q="mt5"${note === '' ? ' hidden' : ''}>${tradeText(note)}</span></td>
+                <td class="px-2 py-1 font-semibold">${tradeText(order.symbol)}</td>
+                <td class="px-2 py-1">${tradeText(order.type)}</td>
+                <td class="px-2 py-1">${tradeText(order.side)}</td>
+                <td class="px-2 py-1 text-right tabular-nums">${tradeText(order.quantity)}</td>
+                <td class="px-2 py-1 text-right tabular-nums">${tradeText(list === 'pending' ? order.trigger : order.entry)}</td>
+                ${history}
+                ${levels}
+                ${money}
+                <td class="px-2 py-1 text-right tabular-nums">${tradeText(order.time)}</td>
+                ${action}
+            </tr>`;
+        };
+
+        const paintOrderRow = (row, order) => {
+            const profit = row.querySelector('[data-q="profit"]');
+
+            if (profit && order.profit !== undefined) {
+                profit.textContent = order.profit;
+                profit.classList.toggle('text-emerald-800', String(order.profit).startsWith('+'));
+                profit.classList.toggle('text-red-800', String(order.profit).startsWith('-'));
+            }
+
+            const note = row.querySelector('[data-q="mt5"]');
+
+            if (! note) {
+                return;
+            }
+
+            const label = orderNote(order);
+
+            if (label === '') {
+                note.hidden = true;
+            } else {
+                note.hidden = false;
+                note.textContent = label;
+            }
+        };
+
+        const paintOrders = (payload) => {
+            const groups = payload.orders || {};
+
+            ['open', 'pending', 'history'].forEach((name) => {
+                const panel = document.querySelector(`[data-order-panel="${name}"]`);
+                const body = panel?.querySelector('[data-order-body]');
+
+                if (! panel || ! body) {
+                    return;
+                }
+
+                const orders = groups[name] || [];
+                const ids = new Set(orders.map((order) => String(order.id)));
+
+                body.querySelectorAll('[data-order-row]').forEach((row) => {
+                    if (! ids.has(row.dataset.orderRow)) {
+                        row.remove();
+                    }
+                });
+
+                orders.forEach((order) => {
+                    const current = document.querySelector(`[data-order-row="${order.id}"]`);
+                    const home = current?.closest('[data-order-panel]');
+
+                    if (current && home === panel) {
+                        paintOrderRow(current, order);
+
+                        return;
+                    }
+
+                    if (current) {
+                        current.remove();
+                    }
+
+                    body.insertAdjacentHTML('afterbegin', orderRowHtml(order, name));
+                });
+
+                const hasRows = body.querySelector('[data-order-row]') !== null;
+                const empty = panel.querySelector('[data-order-empty]');
+                const table = panel.querySelector('table');
+
+                if (empty) {
+                    empty.hidden = hasRows;
+                }
+
+                if (table) {
+                    table.hidden = ! hasRows;
+                }
+            });
+        };
+
+        const showTradeAlert = (message) => {
+            const alert = document.getElementById('trade-alert');
+
+            if (! alert) {
+                return;
+            }
+
+            alert.hidden = message === '';
+            alert.textContent = message;
+        };
+
+        document.addEventListener('submit', async (event) => {
+            const form = event.target;
+
+            if (! (form instanceof HTMLFormElement)) {
+                return;
+            }
+
+            const action = form.action || '';
+            const isTrade = action.includes('/forex/market-watch/open')
+                || action.includes('/forex/market-watch/close')
+                || action.includes('/forex/market-watch/pending')
+                || action.includes('/forex/market-watch/orders/');
+
+            if (! isTrade) {
+                return;
+            }
+
+            event.preventDefault();
+            const data = new FormData(form);
+
+            if (event.submitter && event.submitter.name) {
+                data.set(event.submitter.name, event.submitter.value);
+            }
+
+            try {
+                const response = await fetch(form.action, {
+                    method: 'POST',
+                    body: data,
+                    headers: {
+                        Accept: 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    credentials: 'same-origin',
+                });
+
+                if (! response.ok) {
+                    let message = 'The order was not sent.';
+
+                    try {
+                        const body = await response.json();
+                        message = body.message || message;
+                    } catch (parseError) {
+                        message = 'The order was not sent.';
+                    }
+
+                    showTradeAlert(message);
+
+                    return;
+                }
+
+                showTradeAlert('');
+                await refreshBook();
+            } catch (error) {
+                showTradeAlert('The order was not sent.');
+            }
+        });
 
         const pullDesk = async () => {
             const now = Date.now();
@@ -1074,7 +1293,7 @@
         setInterval(() => {
             bridgeLive = true;
         }, 2000);
-        setInterval(refreshBook, 1000);
+        setInterval(refreshBook, 250);
         refreshTicks();
     </script>
 </x-layouts.shell>

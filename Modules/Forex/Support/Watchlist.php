@@ -91,7 +91,7 @@ class Watchlist
     {
         $linkedUserIds = $account->clientAccounts()->pluck('user_id');
 
-        $linked = WatchlistSymbol::query()
+        $preferred = WatchlistSymbol::query()
             ->when(
                 $linkedUserIds->isNotEmpty(),
                 fn ($query) => $query->whereIn('user_id', $linkedUserIds),
@@ -101,13 +101,6 @@ class Watchlist
             ->pluck('symbol')
             ->all();
 
-        $symbols = Symbols::onlyAllowed($linked);
-
-        if ($symbols === []) {
-            $any = WatchlistSymbol::query()->orderBy('sort')->pluck('symbol')->all();
-            $symbols = Symbols::onlyAllowed($any);
-        }
-
-        return $symbols !== [] ? $symbols : self::defaults();
+        return Symbols::onlyAllowed([...$preferred, ...self::defaults()]);
     }
 }

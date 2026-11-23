@@ -39,8 +39,24 @@ class Ledger
             $locked = ClientAccount::query()->whereKey($account->id)->lockForUpdate()->firstOrFail();
             $next = round((float) $locked->balance + $signed, 2);
 
+            if ($next < 0 && $type === LedgerEntry::TYPE_TRADE) {
+                $signed = round(-1 * (float) $locked->balance, 2);
+                $next = 0.0;
+            }
+
             if ($next < 0) {
                 throw new InvalidArgumentException('Balance cannot go below zero.');
+            }
+
+            if ($signed == 0.0) {
+                return new LedgerEntry([
+                    'client_account_id' => $locked->id,
+                    'type' => $type,
+                    'amount' => 0,
+                    'balance_after' => $next,
+                    'note' => $note !== '' ? $note : null,
+                    'created_by' => $by?->id,
+                ]);
             }
 
             $locked->forceFill(['balance' => $next])->save();

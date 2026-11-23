@@ -25,10 +25,12 @@ Route::post('/forex/mt5-accounts', [Mt5AccountsController::class, 'store'])->nam
 Route::get('/forex/mt5-accounts/{account}/connector', [Mt5AccountsController::class, 'connector'])->name('forex.mt5-accounts.connector');
 Route::post('/forex/mt5-accounts/{account}/connector/prepare', [Mt5AccountsController::class, 'prepareConnector'])->name('forex.mt5-accounts.connector.prepare');
 Route::post('/forex/mt5-accounts/{account}/connector/start', [Mt5AccountsController::class, 'startConnector'])->name('forex.mt5-accounts.connector.start');
+Route::delete('/forex/mt5-accounts/{account}', [Mt5AccountsController::class, 'destroy'])->name('forex.mt5-accounts.destroy');
 Route::get('/forex/mt5-accounts', Mt5AccountsController::class)->name('forex.mt5-accounts');
 
 Route::get('/forex/client-accounts/create', [ClientAccountsController::class, 'create'])->name('forex.client-accounts.create');
 Route::post('/forex/client-accounts', [ClientAccountsController::class, 'store'])->name('forex.client-accounts.store');
+Route::post('/forex/client-accounts/{account}/payment', [ClientAccountsController::class, 'payment'])->name('forex.client-accounts.payment');
 Route::patch('/forex/client-accounts/{account}', [ClientAccountsController::class, 'update'])->name('forex.client-accounts.update');
 Route::get('/forex/client-accounts', ClientAccountsController::class)->name('forex.client-accounts');
 

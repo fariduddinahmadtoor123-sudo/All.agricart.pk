@@ -38,6 +38,13 @@ class Mt5AccountsController extends Controller
         return redirect()->route('forex.mt5-accounts');
     }
 
+    public function destroy(Mt5Account $account): RedirectResponse
+    {
+        $account->delete();
+
+        return redirect()->route('forex.mt5-accounts');
+    }
+
     public function connector(Mt5Account $account, ConnectorPackage $package): BinaryFileResponse
     {
         $path = $package->build($account);

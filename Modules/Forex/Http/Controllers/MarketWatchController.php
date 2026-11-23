@@ -70,7 +70,7 @@ class MarketWatchController extends Controller
         ]);
     }
 
-    public function open(OpenPositionsRequest $request, Trading $trading): RedirectResponse
+    public function open(OpenPositionsRequest $request, Trading $trading): RedirectResponse|JsonResponse
     {
         try {
             $trading->open(
@@ -80,15 +80,13 @@ class MarketWatchController extends Controller
                 (float) $request->input('quantity'),
             );
         } catch (InvalidArgumentException $exception) {
-            return redirect()
-                ->route('forex.market-watch')
-                ->withErrors(['trade' => $exception->getMessage()]);
+            return $this->tradeBack($request, $exception->getMessage());
         }
 
-        return redirect()->route('forex.market-watch');
+        return $this->tradeBack($request);
     }
 
-    public function pending(PlacePendingOrderRequest $request, Trading $trading): RedirectResponse
+    public function pending(PlacePendingOrderRequest $request, Trading $trading): RedirectResponse|JsonResponse
     {
         try {
             $trading->placePending(
@@ -103,15 +101,13 @@ class MarketWatchController extends Controller
                 ],
             );
         } catch (InvalidArgumentException $exception) {
-            return redirect()
-                ->route('forex.market-watch')
-                ->withErrors(['trade' => $exception->getMessage()]);
+            return $this->tradeBack($request, $exception->getMessage());
         }
 
-        return redirect()->route('forex.market-watch');
+        return $this->tradeBack($request);
     }
 
-    public function levels(UpdateOrderLevelsRequest $request, Position $position, Trading $trading): RedirectResponse
+    public function levels(UpdateOrderLevelsRequest $request, Position $position, Trading $trading): RedirectResponse|JsonResponse
     {
         try {
             $trading->updateLevels(
@@ -121,49 +117,47 @@ class MarketWatchController extends Controller
                 $request->filled('take_profit') ? (float) $request->input('take_profit') : null,
             );
         } catch (InvalidArgumentException $exception) {
-            return redirect()
-                ->route('forex.market-watch')
-                ->withErrors(['trade' => $exception->getMessage()]);
+            return $this->tradeBack($request, $exception->getMessage());
         }
 
-        return redirect()->route('forex.market-watch');
+        return $this->tradeBack($request);
     }
 
-    public function cancel(CancelPendingOrderRequest $request, Position $position, Trading $trading): RedirectResponse
+    public function cancel(CancelPendingOrderRequest $request, Position $position, Trading $trading): RedirectResponse|JsonResponse
     {
         try {
             $trading->cancelPending($request->user(), $position);
         } catch (InvalidArgumentException $exception) {
-            return redirect()
-                ->route('forex.market-watch')
-                ->withErrors(['trade' => $exception->getMessage()]);
+            return $this->tradeBack($request, $exception->getMessage());
         }
 
-        return redirect()->route('forex.market-watch');
+        return $this->tradeBack($request);
     }
 
-    public function close(ClosePositionsRequest $request, Trading $trading): RedirectResponse
+    public function close(ClosePositionsRequest $request, Trading $trading): RedirectResponse|JsonResponse
     {
-        $trading->close(
-            $request->user(),
-            $request->string('symbol')->toString(),
-            $request->string('side')->toString(),
-        );
+        try {
+            $trading->close(
+                $request->user(),
+                $request->string('symbol')->toString(),
+                $request->string('side')->toString(),
+            );
+        } catch (InvalidArgumentException $exception) {
+            return $this->tradeBack($request, $exception->getMessage());
+        }
 
-        return redirect()->route('forex.market-watch');
+        return $this->tradeBack($request);
     }
 
-    public function closeOrder(CloseOrderRequest $request, Position $position, Trading $trading): RedirectResponse
+    public function closeOrder(CloseOrderRequest $request, Position $position, Trading $trading): RedirectResponse|JsonResponse
     {
         try {
             $trading->closeOrder($request->user(), $position);
         } catch (InvalidArgumentException $exception) {
-            return redirect()
-                ->route('forex.market-watch')
-                ->withErrors(['trade' => $exception->getMessage()]);
+            return $this->tradeBack($request, $exception->getMessage());
         }
 
-        return redirect()->route('forex.market-watch');
+        return $this->tradeBack($request);
     }
 
     public function watchlist(UpdateWatchlistRequest $request): RedirectResponse
@@ -195,6 +189,25 @@ class MarketWatchController extends Controller
 
         if ($mt5Id) {
             Cache::forget('forex.connector.watch.'.$mt5Id);
+        }
+
+        return redirect()->route('forex.market-watch');
+    }
+
+    private function tradeBack(Request $request, ?string $error = null): RedirectResponse|JsonResponse
+    {
+        if ($request->expectsJson()) {
+            if ($error !== null) {
+                return response()->json(['message' => $error], 422);
+            }
+
+            return response()->json(['ok' => true]);
+        }
+
+        if ($error !== null) {
+            return redirect()
+                ->route('forex.market-watch')
+                ->withErrors(['trade' => $error]);
         }
 
         return redirect()->route('forex.market-watch');

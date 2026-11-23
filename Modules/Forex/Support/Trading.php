@@ -5,12 +5,17 @@ namespace Modules\Forex\Support;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
+use Modules\Forex\Models\ClientAccount;
 use Modules\Forex\Models\LedgerEntry;
+use Modules\Forex\Models\Mt5Command;
 use Modules\Forex\Models\Position;
 
 class Trading
 {
-    public function __construct(private Ledger $ledger = new Ledger) {}
+    public function __construct(
+        private Ledger $ledger = new Ledger,
+        private Mt5Commands $mt5 = new Mt5Commands,
+    ) {}
 
     /**
      * @return array{bid: float, ask: float}|null
@@ -59,18 +64,21 @@ class Trading
             );
         }
 
+        $account = $this->terminalAccount($user);
         $entry = $side === 'buy' ? $quote['ask'] : $quote['bid'];
+        $this->requireFreeMargin($user, $account, $symbol, $quantity, $entry);
         $stopLoss = $this->optionalPrice($options['stop_loss'] ?? null);
         $takeProfit = $this->optionalPrice($options['take_profit'] ?? null);
+        $this->assertLevels($side, $quote['bid'], $quote['ask'], $stopLoss, $takeProfit);
         $commission = isset($options['commission']) && is_numeric($options['commission'])
             ? round((float) $options['commission'], 2)
             : 0.0;
 
-        return Position::query()->create([
+        $position = Position::query()->create([
             'desk_ticket' => Position::nextDeskTicket(),
             'mt5_ticket' => null,
             'user_id' => $user->id,
-            'client_account_id' => $user->clientAccount?->id,
+            'client_account_id' => $account->id,
             'symbol' => $symbol,
             'side' => $side,
             'status' => Position::STATUS_OPEN,
@@ -83,6 +91,10 @@ class Trading
             'commission' => $commission,
             'profit' => 0,
         ]);
+
+        $this->mt5->queue($position, 'open');
+
+        return $position;
     }
 
     /**
@@ -117,13 +129,29 @@ class Trading
             );
         }
 
-        $side = str_starts_with($orderType, 'buy') ? 'buy' : 'sell';
+        $account = $this->terminalAccount($user);
+        $quote = $this->quoteFor($user, $symbol);
 
-        return Position::query()->create([
+        if ($quote === null) {
+            throw new InvalidArgumentException('This symbol has no rate, so the pending order was not placed.');
+        }
+
+        $this->assertPendingPrice($symbol, $orderType, $triggerPrice, $quote['bid'], $quote['ask']);
+        $this->requireFreeMargin($user, $account, $symbol, $quantity, $triggerPrice);
+        $side = str_starts_with($orderType, 'buy') ? 'buy' : 'sell';
+        $this->assertLevels(
+            $side,
+            $triggerPrice,
+            $triggerPrice,
+            $this->optionalPrice($options['stop_loss'] ?? null),
+            $this->optionalPrice($options['take_profit'] ?? null),
+        );
+
+        $position = Position::query()->create([
             'desk_ticket' => Position::nextDeskTicket(),
             'mt5_ticket' => null,
             'user_id' => $user->id,
-            'client_account_id' => $user->clientAccount?->id,
+            'client_account_id' => $account->id,
             'symbol' => $symbol,
             'side' => $side,
             'status' => Position::STATUS_PENDING,
@@ -136,6 +164,10 @@ class Trading
             'commission' => 0,
             'profit' => 0,
         ]);
+
+        $this->mt5->queue($position, 'open');
+
+        return $position;
     }
 
     public function updateLevels(User $user, Position $position, ?float $stopLoss, ?float $takeProfit): Position
@@ -148,12 +180,30 @@ class Trading
             throw new InvalidArgumentException('Order cannot be updated.');
         }
 
+        $stopLoss = $this->optionalPrice($stopLoss);
+        $takeProfit = $this->optionalPrice($takeProfit);
+
+        if ($position->status === Position::STATUS_PENDING) {
+            $this->assertLevels($position->side ?? 'buy', (float) $position->trigger_price, (float) $position->trigger_price, $stopLoss, $takeProfit);
+        } else {
+            $quote = $this->quoteFor($user, $position->symbol);
+
+            if ($quote === null) {
+                throw new InvalidArgumentException('This symbol has no rate, so the levels were not changed.');
+            }
+
+            $this->assertLevels($position->side ?? 'buy', $quote['bid'], $quote['ask'], $stopLoss, $takeProfit);
+        }
+
         $position->forceFill([
             'stop_loss' => $this->optionalPrice($stopLoss),
             'take_profit' => $this->optionalPrice($takeProfit),
         ])->save();
 
-        return $position->fresh();
+        $fresh = $position->fresh();
+        $this->mt5->queue($fresh, 'modify');
+
+        return $fresh;
     }
 
     public function cancelPending(User $user, Position $position): Position
@@ -166,13 +216,13 @@ class Trading
             throw new InvalidArgumentException('Only pending orders can be cancelled.');
         }
 
-        $position->forceFill([
-            'status' => Position::STATUS_CANCELLED,
-            'profit' => 0,
-            'closed_at' => now(),
-        ])->save();
+        if ($this->linkedToTerminal($position) && ! $this->awaitingTerminal($position)) {
+            $this->mt5->queue($position, 'cancel');
 
-        return $position->fresh();
+            return $position->fresh();
+        }
+
+        return $this->voidUnsent($position);
     }
 
     /**
@@ -184,7 +234,7 @@ class Trading
 
         $open = Position::query()
             ->where('user_id', $user->id)
-            ->where('status', Position::STATUS_OPEN)
+            ->whereIn('status', [Position::STATUS_OPEN, Position::STATUS_CLOSING])
             ->whereNull('closed_at')
             ->whereNotNull('entry_price')
             ->whereNotNull('side')
@@ -195,6 +245,14 @@ class Trading
         }
 
         foreach ($open as $position) {
+            if ($this->awaitingTerminal($position)) {
+                if ((float) $position->profit !== 0.0) {
+                    $position->forceFill(['profit' => 0])->save();
+                }
+
+                continue;
+            }
+
             $quote = $this->quoteFor($user, $position->symbol);
 
             if ($quote === null) {
@@ -204,8 +262,12 @@ class Trading
             $profit = $this->unrealized($position, $quote['bid'], $quote['ask']);
             $position->forceFill(['profit' => $profit])->save();
 
+            if ($position->status === Position::STATUS_CLOSING) {
+                continue;
+            }
+
             if ($this->levelsHit($position, $quote['bid'], $quote['ask'])) {
-                $this->finalize($user, $position->fresh());
+                $this->requestClose($user, $position->fresh());
             }
         }
     }
@@ -240,7 +302,7 @@ class Trading
             $closed = 0;
 
             foreach ($positions as $position) {
-                $this->finalize($user, $position);
+                $this->requestClose($user, $position);
                 $closed++;
             }
 
@@ -273,7 +335,7 @@ class Trading
                 return $locked;
             }
 
-            return $this->finalize($user, $locked);
+            return $this->requestClose($user, $locked);
         });
     }
 
@@ -288,7 +350,7 @@ class Trading
         foreach ($pending as $order) {
             $quote = $this->quoteFor($user, $order->symbol);
 
-            if ($quote === null) {
+            if ($quote === null || $this->linkedToTerminal($order)) {
                 continue;
             }
 
@@ -305,6 +367,59 @@ class Trading
                 'entry_price' => $entry,
                 'profit' => 0,
             ])->save();
+        }
+    }
+
+    private function assertPendingPrice(string $symbol, string $orderType, float $trigger, float $bid, float $ask): void
+    {
+        $bidText = rtrim(rtrim(number_format($bid, 5, '.', ''), '0'), '.');
+        $askText = rtrim(rtrim(number_format($ask, 5, '.', ''), '0'), '.');
+        $wrongSide = match ($orderType) {
+            'buy_limit' => $trigger >= $ask,
+            'sell_limit' => $trigger <= $bid,
+            'buy_stop' => $trigger <= $ask,
+            'sell_stop' => $trigger >= $bid,
+            default => true,
+        };
+
+        if (! $wrongSide) {
+            return;
+        }
+
+        $message = match ($orderType) {
+            'buy_limit' => "Buy limit on {$symbol} must be below the ask ({$askText}). A price above the market is a Buy stop.",
+            'sell_limit' => "Sell limit on {$symbol} must be above the bid ({$bidText}). A price below the market is a Sell stop.",
+            'buy_stop' => "Buy stop on {$symbol} must be above the ask ({$askText}). A price below the market is a Buy limit.",
+            'sell_stop' => "Sell stop on {$symbol} must be below the bid ({$bidText}). A price above the market is a Sell limit.",
+            default => 'This pending price is not valid.',
+        };
+
+        throw new InvalidArgumentException($message);
+    }
+
+    private function assertLevels(string $side, float $bid, float $ask, ?float $stopLoss, ?float $takeProfit): void
+    {
+        $bidText = rtrim(rtrim(number_format($bid, 5, '.', ''), '0'), '.');
+        $askText = rtrim(rtrim(number_format($ask, 5, '.', ''), '0'), '.');
+
+        if ($side === 'buy') {
+            if ($stopLoss !== null && $stopLoss >= $bid) {
+                throw new InvalidArgumentException("Stop loss on a buy must be below the bid ({$bidText}).");
+            }
+
+            if ($takeProfit !== null && $takeProfit <= $ask) {
+                throw new InvalidArgumentException("Take profit on a buy must be above the ask ({$askText}).");
+            }
+
+            return;
+        }
+
+        if ($stopLoss !== null && $stopLoss <= $ask) {
+            throw new InvalidArgumentException("Stop loss on a sell must be above the ask ({$askText}).");
+        }
+
+        if ($takeProfit !== null && $takeProfit >= $bid) {
+            throw new InvalidArgumentException("Take profit on a sell must be below the bid ({$bidText}).");
         }
     }
 
@@ -347,6 +462,60 @@ class Trading
         return false;
     }
 
+    /**
+     * Book the close only after MT5 has the position. Until then the order stays at zero.
+     */
+    private function requestClose(User $user, Position $position): Position
+    {
+        if ($this->awaitingTerminal($position)) {
+            return $this->voidUnsent($position);
+        }
+
+        if ($this->linkedToTerminal($position)) {
+            if ($position->status !== Position::STATUS_CLOSING) {
+                $position->forceFill(['status' => Position::STATUS_CLOSING])->save();
+            }
+
+            $this->mt5->queue($position->fresh(), 'close');
+
+            return $position->fresh();
+        }
+
+        return $this->finalize($user, $position);
+    }
+
+    public function confirmClose(Position $position, ?float $price = null): Position
+    {
+        if ($position->closed_at !== null) {
+            return $position;
+        }
+
+        $user = $position->user;
+
+        if (! $user instanceof User) {
+            return $position;
+        }
+
+        $quote = $this->quoteFor($user, $position->symbol);
+        $useFill = $price !== null && $price > 0;
+        $exit = $useFill
+            ? $price
+            : ($quote === null
+                ? (float) ($position->entry_price ?? 0)
+                : ($position->side === 'buy' ? $quote['bid'] : $quote['ask']));
+        $profit = $useFill
+            ? $this->unrealized(
+                $position,
+                $position->side === 'buy' ? $price : 0,
+                $position->side === 'sell' ? $price : 0,
+            )
+            : ($quote === null
+                ? (float) $position->profit
+                : $this->unrealized($position, $quote['bid'], $quote['ask']));
+
+        return $this->book($user, $position, $exit, $profit);
+    }
+
     private function finalize(User $user, Position $position): Position
     {
         $quote = $this->quoteFor($user, $position->symbol);
@@ -359,8 +528,15 @@ class Trading
             ? (float) $position->profit
             : $this->unrealized($position, $quote['bid'], $quote['ask']);
 
-        $commission = (float) ($position->commission ?? 0);
-        $net = round($profit - $commission, 2);
+        $closed = $this->book($user, $position, $exit, $profit);
+        $this->mt5->queue($closed, 'close');
+
+        return $closed;
+    }
+
+    private function book(User $user, Position $position, float $exit, float $profit): Position
+    {
+        $net = round($profit - (float) ($position->commission ?? 0), 2);
 
         $position->forceFill([
             'status' => Position::STATUS_CLOSED,
@@ -387,6 +563,98 @@ class Trading
         }
 
         return $position->fresh();
+    }
+
+    private function voidUnsent(Position $position): Position
+    {
+        Mt5Command::query()
+            ->where('position_id', $position->id)
+            ->whereIn('status', [Mt5Command::STATUS_PENDING, Mt5Command::STATUS_FAILED])
+            ->update([
+                'status' => Mt5Command::STATUS_FAILED,
+                'attempts' => 5,
+                'error' => 'Cancelled before it reached MT5.',
+            ]);
+
+        $position->forceFill([
+            'status' => Position::STATUS_CANCELLED,
+            'profit' => 0,
+            'closed_at' => now(),
+        ])->save();
+
+        return $position->fresh();
+    }
+
+    public function usedMargin(Position $position, int $leverage): float
+    {
+        $quantity = (float) ($position->quantity ?? 0);
+        $price = (float) ($position->entry_price ?? $position->trigger_price ?? 0);
+
+        if ($quantity <= 0 || $price <= 0 || $leverage < 1) {
+            return 0.0;
+        }
+
+        return round($this->notional($position->symbol, $quantity, $price) / $leverage, 2);
+    }
+
+    private function requireFreeMargin(User $user, ClientAccount $account, string $symbol, float $quantity, float $price): void
+    {
+        $leverage = max(1, (int) $account->leverage);
+        $needed = round($this->notional($symbol, $quantity, $price) / $leverage, 2);
+        $used = Position::query()
+            ->where('user_id', $user->id)
+            ->whereIn('status', [Position::STATUS_OPEN, Position::STATUS_CLOSING, Position::STATUS_PENDING])
+            ->whereNull('closed_at')
+            ->get()
+            ->sum(fn (Position $position): float => $this->usedMargin($position, $leverage));
+        $equity = (float) $account->balance + (float) Position::query()
+            ->where('user_id', $user->id)
+            ->whereIn('status', [Position::STATUS_OPEN, Position::STATUS_CLOSING])
+            ->whereNull('closed_at')
+            ->sum('profit');
+
+        if ($used + $needed > $equity + 0.009) {
+            throw new InvalidArgumentException('Free margin is not enough for this order.');
+        }
+    }
+
+    private function notional(string $symbol, float $quantity, float $price): float
+    {
+        $contract = $this->contractSize($symbol);
+        $key = strtoupper($symbol);
+        $pricedInUsd = str_starts_with($key, 'USD')
+            && ! str_starts_with($key, 'US30')
+            && ! str_starts_with($key, 'US100');
+
+        if ($pricedInUsd) {
+            return $quantity * $contract;
+        }
+
+        return $quantity * $contract * $price;
+    }
+
+    private function terminalAccount(User $user): ClientAccount
+    {
+        $account = $user->clientAccount;
+
+        if ($account === null || $account->mt5_account_id === null || ! $account->active) {
+            throw new InvalidArgumentException('This login has no MT5 account, so the order was not placed.');
+        }
+
+        return $account;
+    }
+
+    private function linkedToTerminal(Position $position): bool
+    {
+        $position->loadMissing('clientAccount');
+
+        return $position->clientAccount?->mt5_account_id !== null;
+    }
+
+    private function awaitingTerminal(Position $position): bool
+    {
+        return $this->linkedToTerminal($position)
+            && ($position->mt5_ticket === null || $position->mt5_ticket === '');
     }
 
     /**

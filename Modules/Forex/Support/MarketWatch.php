@@ -6,6 +6,7 @@ use App\Models\User;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
 use Modules\Forex\Models\Mt5Account;
+use Modules\Forex\Models\Mt5Command;
 use Modules\Forex\Models\Mt5Quote;
 use Modules\Forex\Models\Position;
 
@@ -34,8 +35,14 @@ class MarketWatch
         /** @var Collection<string, Collection<int, Position>> $open */
         $open = Position::query()
             ->where('user_id', $user->id)
-            ->where('status', Position::STATUS_OPEN)
+            ->whereIn('status', [Position::STATUS_OPEN, Position::STATUS_CLOSING])
             ->whereNull('closed_at')
+            ->where(function ($query): void {
+                $query->whereNull('client_account_id')
+                    ->orWhere(function ($linked): void {
+                        $linked->whereNotNull('mt5_ticket')->where('mt5_ticket', '!=', '');
+                    });
+            })
             ->get(['symbol', 'side', 'quantity', 'profit', 'entry_price'])
             ->groupBy('symbol');
 
@@ -98,6 +105,7 @@ class MarketWatch
                     'category' => $category,
                     'live' => true,
                     'broker_open' => true,
+                    'offered' => true,
                 ];
             }
 
@@ -113,6 +121,7 @@ class MarketWatch
                 'category' => $category,
                 'live' => false,
                 'broker_open' => ! $feedOnline,
+                'offered' => ! $feedOnline,
             ];
         }, $wanted);
     }
@@ -120,12 +129,10 @@ class MarketWatch
     public static function onlineFeed(?User $user = null): ?Mt5Account
     {
         $fresh = now()->subSeconds(30);
-        $feed = null;
-
         $linkedId = $user?->clientAccount?->mt5_account_id;
 
         if ($linkedId) {
-            $feed = Mt5Account::query()
+            return Mt5Account::query()
                 ->whereKey($linkedId)
                 ->where('active', true)
                 ->whereNotNull('last_seen_at')
@@ -133,7 +140,7 @@ class MarketWatch
                 ->first();
         }
 
-        return $feed ?? Mt5Account::query()
+        return Mt5Account::query()
             ->where('active', true)
             ->whereNotNull('last_seen_at')
             ->where('last_seen_at', '>=', $fresh)
@@ -257,7 +264,15 @@ class MarketWatch
             ->latest('id')
             ->get();
 
-        $present = function (Position $position, string $when): array {
+        $rejections = Mt5Command::query()
+            ->whereIn('position_id', $positions->pluck('id'))
+            ->whereNotNull('error')
+            ->orderByDesc('id')
+            ->get()
+            ->unique('position_id')
+            ->keyBy('position_id');
+
+        $present = function (Position $position, string $when) use ($rejections): array {
             $price = static function (?float $value): string {
                 if ($value === null || $value <= 0) {
                     return '—';
@@ -279,6 +294,13 @@ class MarketWatch
             return [
                 'id' => $position->id,
                 'ticket' => $position->desk_ticket ?: ('D-'.$position->id),
+                'mt5' => $position->mt5_ticket ?: '',
+                'mt5_waiting' => $position->client_account_id !== null
+                    && ($position->mt5_ticket === null || $position->mt5_ticket === '')
+                    && $position->closed_at === null
+                    && $position->status !== Position::STATUS_CLOSING,
+                'mt5_closing' => $position->status === Position::STATUS_CLOSING && $position->closed_at === null,
+                'mt5_error' => self::terminalNote($rejections->get($position->id)?->error, $position),
                 'symbol' => $position->symbol,
                 'type' => $type,
                 'side' => $position->side === null ? '—' : ucfirst($position->side),
@@ -309,8 +331,8 @@ class MarketWatch
                 ->values()
                 ->all(),
             'open' => $positions
-                ->where('status', Position::STATUS_OPEN)
-                ->whereNull('closed_at')
+                ->filter(fn (Position $position): bool => in_array($position->status, [Position::STATUS_OPEN, Position::STATUS_CLOSING], true)
+                    && $position->closed_at === null)
                 ->map(fn (Position $position): array => $present($position, 'created_at'))
                 ->values()
                 ->all(),
@@ -330,22 +352,55 @@ class MarketWatch
      */
     public static function account(User $user): array
     {
-        $deskProfit = (float) Position::query()
+        (new Trading)->markOpen($user);
+
+        $open = Position::query()
             ->where('user_id', $user->id)
-            ->where('status', Position::STATUS_OPEN)
-            ->whereNull('closed_at')
+            ->whereIn('status', [Position::STATUS_OPEN, Position::STATUS_CLOSING])
+            ->whereNull('closed_at');
+
+        $deskProfit = (float) (clone $open)
+            ->where(function ($query): void {
+                $query->whereNull('client_account_id')
+                    ->orWhere(function ($linked): void {
+                        $linked->whereNotNull('mt5_ticket')->where('mt5_ticket', '!=', '');
+                    });
+            })
             ->sum('profit');
 
         $balance = self::balanceFor($user);
         $equity = $balance + $deskProfit;
+        $leverage = max(1, (int) ($user->clientAccount?->leverage ?? 1));
+        $trading = new Trading;
+        $margin = $user->clientAccount === null
+            ? 0.0
+            : Position::query()
+                ->where('user_id', $user->id)
+                ->whereIn('status', [Position::STATUS_OPEN, Position::STATUS_CLOSING, Position::STATUS_PENDING])
+                ->whereNull('closed_at')
+                ->get()
+                ->sum(fn (Position $position): float => $trading->usedMargin($position, $leverage));
+        $free = $equity - $margin;
+        $number = $user->clientAccount?->number;
 
-        return [
+        $meters = [
             ['label' => 'Balance', 'value' => self::figure($balance), 'tone' => ''],
             ['label' => 'Equity', 'value' => self::figure($equity), 'tone' => ''],
             ['label' => 'P/L', 'value' => self::money($deskProfit), 'tone' => $deskProfit > 0 ? 'profit' : ($deskProfit < 0 ? 'loss' : '')],
-            ['label' => 'Margin', 'value' => self::figure(0.0), 'tone' => ''],
-            ['label' => 'Free margin', 'value' => self::figure($equity), 'tone' => ''],
+            ['label' => 'Margin', 'value' => self::figure($margin), 'tone' => ''],
+            ['label' => 'Free margin', 'value' => self::figure($free), 'tone' => ''],
+            ['label' => 'Margin level', 'value' => $margin > 0 ? number_format($equity / $margin * 100, 2, '.', ',').'%' : '—', 'tone' => ''],
         ];
+
+        if ($user->clientAccount !== null) {
+            $meters[] = ['label' => 'Leverage', 'value' => '1:'.$user->clientAccount->leverage, 'tone' => ''];
+        }
+
+        if (is_string($number) && $number !== '') {
+            array_unshift($meters, ['label' => 'Account', 'value' => $number, 'tone' => '']);
+        }
+
+        return $meters;
     }
 
     public static function balanceFor(User $user): float
@@ -436,5 +491,26 @@ class MarketWatch
         $formatted = number_format($amount, 2, '.', '');
 
         return $amount > 0 ? '+'.$formatted : $formatted;
+    }
+
+    private static function terminalNote(?string $error, Position $position): string
+    {
+        if ($error === null || $error === '' || $position->closed_at !== null) {
+            return '';
+        }
+
+        if ($position->mt5_ticket !== null && $position->mt5_ticket !== '' && $position->status !== Position::STATUS_CLOSING) {
+            return '';
+        }
+
+        if (str_contains($error, '10026') || str_contains($error, 'disabled by server')) {
+            return 'This broker blocks Algo Trading on the server.';
+        }
+
+        if (str_contains($error, '10027') || str_contains($error, 'disabled by client')) {
+            return 'Reached MT5. Turn Algo Trading green.';
+        }
+
+        return $error;
     }
 }

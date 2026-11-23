@@ -28,6 +28,20 @@
             <span class="text-sm font-normal">{{ $message }}</span>
         @enderror
     </label>
+    <label class="flex flex-col gap-2 text-sm font-semibold">
+        Leverage
+        <input name="leverage" type="number" min="1" max="2000" step="1" value="{{ old('leverage', 100) }}" required class="rounded-xl border border-line bg-canvas px-4 py-3 text-base font-normal outline-none focus:border-ink">
+        @error('leverage')
+            <span class="text-sm font-normal">{{ $message }}</span>
+        @enderror
+    </label>
+    <label class="flex flex-col gap-2 text-sm font-semibold">
+        Amount
+        <input name="amount" type="number" min="0" step="0.01" value="{{ old('amount', '10000') }}" required class="rounded-xl border border-line bg-canvas px-4 py-3 text-base font-normal outline-none focus:border-ink">
+        @error('amount')
+            <span class="text-sm font-normal">{{ $message }}</span>
+        @enderror
+    </label>
     <div class="mt-auto flex justify-end gap-2 border-t border-line pt-4">
         @isset($cancel)
             <a href="{{ $cancel }}" class="rounded-xl border border-line bg-canvas px-4 py-2 text-sm font-semibold">Cancel</a>
