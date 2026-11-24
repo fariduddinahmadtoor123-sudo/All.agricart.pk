@@ -1,6 +1,7 @@
 <x-layouts.shell title="Trade Terminal" :user="$user" fit :heading="false">
     <x-slot:meters>
         @foreach ($account as $meter)
+            @continue(in_array($meter['label'], ['Account', 'Leverage', 'Margin level'], true))
             <div class="flex h-8 shrink-0 items-center gap-2 rounded-xl border border-line bg-white px-2.5 text-black" data-meter="{{ $meter['label'] }}">
                 <span class="text-xs font-medium">{{ $meter['label'] }}</span>
                 <span
@@ -13,30 +14,6 @@
                 >{{ $meter['value'] }}</span>
             </div>
         @endforeach
-
-        <div id="market-sessions" class="flex h-8 shrink-0 flex-col justify-center gap-0.5" aria-label="Market sessions">
-            <div class="flex items-center gap-0.5">
-                @foreach ($sessions as $session)
-                    <span
-                        data-session="{{ $session['key'] }}"
-                        data-open="{{ $session['open'] }}"
-                        data-close="{{ $session['close'] }}"
-                        @class([
-                            'flex h-3.5 shrink-0 items-center rounded-md px-1.5 text-[9px] font-semibold leading-none',
-                            'bg-emerald-700 text-white' => $session['active'],
-                            'border border-line bg-white text-ink' => ! $session['active'],
-                        ])
-                    >{{ $session['label'] }}</span>
-                @endforeach
-            </div>
-            <div class="relative h-1.5 w-full min-w-36 overflow-hidden rounded-full bg-black/10" aria-label="Liquidity {{ $liquidity['level'] }}" data-liquidity-track>
-                <span
-                    data-liquidity-fill
-                    class="absolute inset-y-0 left-0 rounded-full transition-[width,background-color] duration-300"
-                    style="width: {{ $liquidity['percent'] }}%; background-color: {{ $liquidity['color'] }}"
-                ></span>
-            </div>
-        </div>
     </x-slot:meters>
 
     <x-slot:panel>
@@ -45,25 +22,40 @@
                 <input type="checkbox" id="fast-trade-master" class="h-4 w-4" aria-label="Fast trading">
                 Fast trading
             </label>
-            <p id="fast-trade-hint" class="hidden text-[11px] font-medium text-ink/70" role="status">
-                Fast trading: arm a row, then one click buys or sells.
-            </p>
-            <span class="text-[11px] font-medium text-ink/60">
-                {{ count($watchlist) }} on wishlist
-                @if ($feedOnline)
-                    · live feed
-                @else
-                    · waiting for connector
-                @endif
-            </span>
+            <div id="market-sessions" class="flex h-8 min-w-44 flex-col justify-center gap-1 rounded-xl border border-line bg-white px-2 text-black" aria-label="Market sessions">
+                <div class="flex items-center gap-1">
+                    @foreach ($sessions as $session)
+                        <span
+                            data-session="{{ $session['key'] }}"
+                            data-open="{{ $session['open'] }}"
+                            data-close="{{ $session['close'] }}"
+                            @class([
+                                'flex h-3.5 shrink-0 items-center rounded-md px-1.5 text-[9px] font-semibold leading-none',
+                                'bg-emerald-700 text-white' => $session['active'],
+                                'border border-line bg-canvas text-ink' => ! $session['active'],
+                            ])
+                        >{{ $session['label'] }}</span>
+                    @endforeach
+                </div>
+                <div class="relative h-1.5 w-full overflow-hidden rounded-full bg-black/10" aria-label="Liquidity {{ $liquidity['level'] }}" data-liquidity-track>
+                    <span
+                        data-liquidity-fill
+                        class="absolute inset-y-0 left-0 rounded-full transition-[width,background-color] duration-300"
+                        style="width: {{ $liquidity['percent'] }}%; background-color: {{ $liquidity['color'] }}"
+                    ></span>
+                </div>
+            </div>
         </div>
     </x-slot:panel>
 
-    <p id="trade-alert" class="mb-3 text-sm text-red-800" @if (! $errors->any()) hidden @endif>{{ $errors->first() }}</p>
+    @if (session('status'))
+        <p class="mb-2 text-sm">{{ session('status') }}</p>
+    @endif
 
     <div id="watch-board" class="flex min-h-0 flex-1 flex-col gap-2 xl:flex-row">
     <div id="watch-main" class="flex min-h-0 min-w-0 flex-[1.6] flex-col gap-2">
     <section class="flex min-h-0 flex-[1.4] flex-col overflow-hidden rounded-2xl border border-line bg-card" data-arrow-pane data-pane="quotes" data-pane-title="Symbols">
+        <p id="trade-alert" class="shrink-0 border-b border-line px-2 py-1 text-xs text-red-800" @if (! $errors->any()) hidden @endif>{{ $errors->first() }}</p>
         <div class="flex shrink-0 flex-wrap items-center gap-1 border-b border-line px-2 py-1 sm:gap-2">
             <div class="flex min-w-0 flex-1 flex-wrap items-center gap-1" role="tablist" aria-label="Symbol sessions">
                 <button
@@ -83,6 +75,10 @@
                         aria-selected="false"
                     >{{ $category['label'] }}</button>
                 @endforeach
+            </div>
+            <div class="flex shrink-0 items-center gap-1 border-l border-line pl-1">
+                <button type="button" data-window-open="terminal-ledger" class="rounded-lg px-2 py-1 text-[11px] font-semibold hover:bg-soft sm:px-2.5 sm:text-xs">Ledger</button>
+                <button type="button" data-window-open="terminal-payments" class="rounded-lg px-2 py-1 text-[11px] font-semibold hover:bg-soft sm:px-2.5 sm:text-xs">Payments</button>
             </div>
             @include('forex.partials.pane-controls', ['title' => 'Symbols'])
         </div>
@@ -148,9 +144,10 @@
                                 <input
                                     type="number"
                                     name="quantity"
-                                    value="0.01"
+                                    value="{{ $quote['min_lot'] ?? '0.01' }}"
                                     min="0.01"
                                     step="0.01"
+                                    data-min-lot="{{ $quote['min_lot'] ?? '0.01' }}"
                                     inputmode="decimal"
                                     class="h-6 w-14 rounded-lg border border-line bg-canvas px-1 text-center text-xs tabular-nums text-ink outline-none focus:border-ink/40"
                                     aria-label="Quantity for {{ $quote['symbol'] }}"
@@ -267,11 +264,9 @@
                                     <tr class="border-t border-line" data-order-row="{{ $order['id'] }}">
                                         <td class="px-2 py-1 font-semibold tabular-nums">
                                             <span data-q="ticket">{{ $order['ticket'] }}</span>
-                                            <span
-                                                class="mt-0.5 block text-[10px] font-medium text-ink/60"
-                                                data-q="mt5"
-                                                @if ($order['mt5'] === '' && ! $order['mt5_waiting'] && ! $order['mt5_closing']) hidden @endif
-                                            >{{ $order['mt5'] !== '' ? 'MT5 '.$order['mt5'] : ($order['mt5_closing'] ? 'Closing on MT5' : 'MT5 pending') }}{{ $order['mt5_error'] !== '' ? '. '.$order['mt5_error'] : '' }}</span>
+                                            @if ($order['mt5_error'] !== '')
+                                                <span class="mt-0.5 block text-[10px] font-medium text-ink/60" data-q="mt5">{{ $order['mt5_error'] }}</span>
+                                            @endif
                                         </td>
                                         <td class="px-2 py-1 font-semibold">{{ $order['symbol'] }}</td>
                                         <td class="px-2 py-1">{{ $order['type'] }}</td>
@@ -294,7 +289,8 @@
                                                         step="any"
                                                         inputmode="decimal"
                                                         placeholder="S/L"
-                                                        class="h-6 w-16 rounded-lg border border-line bg-canvas px-1 text-right text-xs tabular-nums text-ink outline-none focus:border-ink/40"
+                                                        class="h-6 min-w-0 rounded-lg border border-line bg-canvas px-1 text-right text-xs tabular-nums text-ink outline-none focus:border-ink/40"
+                                                        style="width:3.5rem;max-width:3.5rem"
                                                         aria-label="Stop loss for {{ $order['ticket'] }}"
                                                     >
                                                     <input
@@ -305,7 +301,8 @@
                                                         step="any"
                                                         inputmode="decimal"
                                                         placeholder="T/P"
-                                                        class="h-6 w-16 rounded-lg border border-line bg-canvas px-1 text-right text-xs tabular-nums text-ink outline-none focus:border-ink/40"
+                                                        class="h-6 min-w-0 rounded-lg border border-line bg-canvas px-1 text-right text-xs tabular-nums text-ink outline-none focus:border-ink/40"
+                                                        style="width:3.5rem;max-width:3.5rem"
                                                         aria-label="Take profit for {{ $order['ticket'] }}"
                                                     >
                                                     <button
@@ -397,7 +394,7 @@
                     Symbol
                     <select name="symbol" class="h-7 rounded-lg border border-line bg-canvas px-2 text-xs text-ink">
                         @foreach ($quotes as $quote)
-                            <option value="{{ $quote['symbol'] }}">{{ $quote['symbol'] }}</option>
+                            <option value="{{ $quote['symbol'] }}" data-min="{{ $quote['min_lot'] ?? '0.01' }}" data-step="{{ $quote['lot_step'] ?? '0.01' }}">{{ $quote['symbol'] }}</option>
                         @endforeach
                     </select>
                 </label>
@@ -412,21 +409,21 @@
                 </label>
                 <label class="grid gap-1 text-[11px] text-ink/70">
                     Lots
-                    <input type="number" name="quantity" value="0.01" min="0.01" step="0.01" class="h-7 rounded-lg border border-line bg-canvas px-2 text-xs tabular-nums text-ink">
+                    <input type="number" name="quantity" value="0.01" min="0.01" step="0.01" data-min-lot="{{ $quotes[0]['min_lot'] ?? '0.01' }}" class="h-7 rounded-lg border border-line bg-canvas px-2 text-xs tabular-nums text-ink">
                 </label>
                 <label class="grid gap-1 text-[11px] text-ink/70">
                     Price
                     <input type="number" name="trigger_price" value="" min="0" step="any" required class="h-7 rounded-lg border border-line bg-canvas px-2 text-xs tabular-nums text-ink">
                 </label>
                 <p class="text-[11px] text-ink/60">Buy limit and sell stop sit below the price. Sell limit and buy stop sit above it.</p>
-                <div class="grid grid-cols-2 gap-2">
+                <div class="flex gap-2">
                     <label class="grid gap-1 text-[11px] text-ink/70">
                         S/L
-                        <input type="number" name="stop_loss" value="" min="0" step="any" class="h-7 rounded-lg border border-line bg-canvas px-2 text-xs tabular-nums text-ink">
+                        <input type="number" name="stop_loss" value="" min="0" step="any" class="h-7 min-w-0 rounded-lg border border-line bg-canvas px-1 text-xs tabular-nums text-ink" style="width:4rem;max-width:4rem">
                     </label>
                     <label class="grid gap-1 text-[11px] text-ink/70">
                         T/P
-                        <input type="number" name="take_profit" value="" min="0" step="any" class="h-7 rounded-lg border border-line bg-canvas px-2 text-xs tabular-nums text-ink">
+                        <input type="number" name="take_profit" value="" min="0" step="any" class="h-7 min-w-0 rounded-lg border border-line bg-canvas px-1 text-xs tabular-nums text-ink" style="width:4rem;max-width:4rem">
                     </label>
                 </div>
                 <button type="submit" class="h-7 rounded-lg bg-ink px-3 text-xs font-semibold text-canvas">Place pending</button>
@@ -543,6 +540,12 @@
                 </div>
             </form>
         </x-desk-window>
+        <x-desk-window id="terminal-ledger" title="Account ledger" :tab="route('forex.market-watch.ledger')">
+            @include('forex.terminal.partials.ledger')
+        </x-desk-window>
+        <x-desk-window id="terminal-payments" title="Payment requests" :tab="route('forex.market-watch.payments')" :open="$errors->any() && str_starts_with((string) old('_form'), 'terminal-')">
+            @include('forex.terminal.partials.payments')
+        </x-desk-window>
     @endpush
 
     <script>
@@ -579,7 +582,6 @@
         });
 
         const FAST_KEY = 'desk-fast-trading';
-        const fastHint = document.getElementById('fast-trade-hint');
 
         const syncFastTrade = (box) => {
             box.closest('form').querySelectorAll('[data-fast-trade]').forEach((button) => {
@@ -590,7 +592,6 @@
         const applyFastMode = (on, store = true) => {
             fastMaster.checked = on;
             fastMaster.indeterminate = false;
-            fastHint?.classList.toggle('hidden', ! on);
 
             if (store) {
                 localStorage.setItem(FAST_KEY, on ? '1' : '0');
@@ -860,7 +861,7 @@
 
                 chip.classList.toggle('bg-emerald-700', on);
                 chip.classList.toggle('text-white', on);
-                chip.classList.toggle('bg-white', ! on);
+                chip.classList.toggle('bg-canvas', ! on);
                 chip.classList.toggle('text-ink', ! on);
                 chip.classList.toggle('border', ! on);
                 chip.classList.toggle('border-line', ! on);
@@ -928,6 +929,8 @@
                         }
                     });
                 }
+
+                paintLotNote(row, quote);
 
                 let note = row.querySelector('[data-q="broker-note"]');
 
@@ -1012,17 +1015,7 @@
             .replaceAll('>', '&gt;')
             .replaceAll('"', '&quot;');
 
-        const orderNote = (order) => {
-            const label = order.mt5
-                ? `MT5 ${order.mt5}`
-                : (order.mt5_closing ? 'Closing on MT5' : (order.mt5_waiting ? 'MT5 pending' : ''));
-
-            if (label === '') {
-                return '';
-            }
-
-            return order.mt5_error ? `${label}. ${order.mt5_error}` : label;
-        };
+        const orderNote = (order) => order.mt5_error ? String(order.mt5_error) : '';
 
         const orderRowHtml = (order, list) => {
             const note = orderNote(order);
@@ -1033,8 +1026,8 @@
                 ? `<td class="px-2 py-1" colspan="2">
                         <form method="POST" action="/forex/market-watch/orders/${order.id}/levels" class="flex items-center justify-end gap-1">
                             <input type="hidden" name="_token" value="${tradeText(tradeToken())}">
-                            <input type="number" name="stop_loss" value="${tradeText(order.stop_loss_raw)}" min="0" step="any" inputmode="decimal" placeholder="S/L" class="h-6 w-16 rounded-lg border border-line bg-canvas px-1 text-right text-xs tabular-nums text-ink outline-none focus:border-ink/40" aria-label="Stop loss for ${tradeText(order.ticket)}">
-                            <input type="number" name="take_profit" value="${tradeText(order.take_profit_raw)}" min="0" step="any" inputmode="decimal" placeholder="T/P" class="h-6 w-16 rounded-lg border border-line bg-canvas px-1 text-right text-xs tabular-nums text-ink outline-none focus:border-ink/40" aria-label="Take profit for ${tradeText(order.ticket)}">
+                            <input type="number" name="stop_loss" value="${tradeText(order.stop_loss_raw)}" min="0" step="any" inputmode="decimal" placeholder="S/L" class="h-6 min-w-0 rounded-lg border border-line bg-canvas px-1 text-right text-xs tabular-nums text-ink outline-none focus:border-ink/40" style="width:3.5rem;max-width:3.5rem" aria-label="Stop loss for ${tradeText(order.ticket)}">
+                            <input type="number" name="take_profit" value="${tradeText(order.take_profit_raw)}" min="0" step="any" inputmode="decimal" placeholder="T/P" class="h-6 min-w-0 rounded-lg border border-line bg-canvas px-1 text-right text-xs tabular-nums text-ink outline-none focus:border-ink/40" style="width:3.5rem;max-width:3.5rem" aria-label="Take profit for ${tradeText(order.ticket)}">
                             <button type="submit" class="grid h-6 place-items-center rounded-lg border border-line bg-canvas px-2 text-[10px] font-semibold text-ink hover:bg-soft" aria-label="Save levels for ${tradeText(order.ticket)}">Set</button>
                         </form>
                     </td>`
@@ -1052,7 +1045,7 @@
                     : '');
 
             return `<tr class="border-t border-line" data-order-row="${order.id}">
-                <td class="px-2 py-1 font-semibold tabular-nums"><span data-q="ticket">${tradeText(order.ticket)}</span><span class="mt-0.5 block text-[10px] font-medium text-ink/60" data-q="mt5"${note === '' ? ' hidden' : ''}>${tradeText(note)}</span></td>
+                <td class="px-2 py-1 font-semibold tabular-nums"><span data-q="ticket">${tradeText(order.ticket)}</span>${note === '' ? '' : `<span class="mt-0.5 block text-[10px] font-medium text-ink/60" data-q="mt5">${tradeText(note)}</span>`}</td>
                 <td class="px-2 py-1 font-semibold">${tradeText(order.symbol)}</td>
                 <td class="px-2 py-1">${tradeText(order.type)}</td>
                 <td class="px-2 py-1">${tradeText(order.side)}</td>
@@ -1142,6 +1135,62 @@
             });
         };
 
+        const lotRule = (quote) => {
+            const minimum = Number(quote.min_lot ?? quote.volume_min);
+            const step = Number(quote.lot_step ?? quote.volume_step);
+
+            if (! Number.isFinite(minimum) || minimum <= 0) {
+                return null;
+            }
+
+            const minText = minimum.toFixed(2);
+            const stepText = (Number.isFinite(step) && step > 0 ? step : 0.01).toFixed(2);
+
+            return {
+                minText,
+                stepText,
+                note: minimum > 0.01 ? `Minimum ${minText} lots on this symbol.` : '',
+            };
+        };
+
+        const paintLotNote = (row, quote) => {
+            const rule = lotRule(quote);
+
+            if (! rule) {
+                return;
+            }
+
+            const input = row.querySelector('input[name="quantity"]');
+
+            if (input) {
+                input.dataset.minLot = rule.minText;
+            }
+
+            const option = document.querySelector(`#watch-board select[name="symbol"] option[value="${quote.symbol}"]`);
+
+            if (option) {
+                option.dataset.min = rule.minText;
+                option.dataset.step = rule.stepText;
+            }
+        };
+
+        const syncPendingLots = () => {
+            const form = document.querySelector('form[action*="/pending"]');
+
+            if (! form) {
+                return;
+            }
+
+            const option = form.symbol?.selectedOptions?.[0];
+            const input = form.querySelector('input[name="quantity"]');
+
+            if (input && option?.dataset.min) {
+                input.dataset.minLot = option.dataset.min;
+            }
+        };
+
+        document.querySelector('form[action*="/pending"] select[name="symbol"]')?.addEventListener('change', syncPendingLots);
+
         const showTradeAlert = (message) => {
             const alert = document.getElementById('trade-alert');
 
@@ -1175,6 +1224,15 @@
 
             if (event.submitter && event.submitter.name) {
                 data.set(event.submitter.name, event.submitter.value);
+            }
+
+            const lotField = form.querySelector('input[name="quantity"]');
+            const floor = Number(lotField?.dataset.minLot || 0.01);
+
+            if (lotField && Number(data.get('quantity')) + 0.0000001 < floor) {
+                showTradeAlert(`Minimum ${floor.toFixed(2)} lots on this symbol.`);
+
+                return;
             }
 
             try {

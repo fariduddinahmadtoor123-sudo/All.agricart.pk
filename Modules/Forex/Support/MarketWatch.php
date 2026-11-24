@@ -12,8 +12,6 @@ use Modules\Forex\Models\Position;
 
 class MarketWatch
 {
-    public const BALANCE = 10000.0;
-
     /**
      * @return list<string>
      */
@@ -118,6 +116,7 @@ class MarketWatch
                 'range' => '—',
                 'low' => '—',
                 'time' => '—',
+                ...self::lotLimit(null, null),
                 'category' => $category,
                 'live' => false,
                 'broker_open' => ! $feedOnline,
@@ -206,6 +205,7 @@ class MarketWatch
                         'range' => self::price($range, $digits),
                         'low' => self::price($low, $digits),
                         'time' => ($quote->tick_at ?? now())->timezone(config('app.timezone'))->format('H:i:s'),
+                        ...self::lotLimit($quote->volume_min, $quote->volume_step),
                     ],
                 ];
             })
@@ -354,6 +354,34 @@ class MarketWatch
     {
         (new Trading)->markOpen($user);
 
+        return self::meters($user);
+    }
+
+    /**
+     * Account number, leverage, and margin level for the trade terminal account menu.
+     *
+     * @return array{number: string, leverage: string, marginLevel: string}|null
+     */
+    public static function menuFacts(User $user): ?array
+    {
+        if ($user->clientAccount === null) {
+            return null;
+        }
+
+        $meters = collect(self::meters($user))->pluck('value', 'label');
+
+        return [
+            'number' => (string) $meters->get('Account'),
+            'leverage' => (string) $meters->get('Leverage'),
+            'marginLevel' => (string) $meters->get('Margin level'),
+        ];
+    }
+
+    /**
+     * @return list<array{label: string, value: string, tone: string}>
+     */
+    private static function meters(User $user): array
+    {
         $open = Position::query()
             ->where('user_id', $user->id)
             ->whereIn('status', [Position::STATUS_OPEN, Position::STATUS_CLOSING])
@@ -411,7 +439,7 @@ class MarketWatch
             return (float) $account->balance;
         }
 
-        return self::BALANCE;
+        return 0.0;
     }
 
     /**
@@ -479,6 +507,23 @@ class MarketWatch
             ->sum(fn (Position $trade): float => (float) $trade->quantity);
 
         return number_format($total, 2, '.', '');
+    }
+
+    /**
+     * @return array{min_lot: string, lot_step: string, lot_note: string}
+     */
+    public static function lotLimit(mixed $minimum, mixed $step): array
+    {
+        $minimum = is_numeric($minimum) ? round(max(0.01, (float) $minimum), 2) : 0.01;
+        $step = is_numeric($step) ? round(max(0.01, (float) $step), 2) : 0.01;
+
+        return [
+            'min_lot' => number_format($minimum, 2, '.', ''),
+            'lot_step' => number_format($step, 2, '.', ''),
+            'lot_note' => $minimum > 0.01
+                ? 'Minimum '.number_format($minimum, 2, '.', '').' lots on this symbol.'
+                : '',
+        ];
     }
 
     public static function figure(float $amount): string

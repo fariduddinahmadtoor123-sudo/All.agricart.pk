@@ -8,6 +8,7 @@ use InvalidArgumentException;
 use Modules\Forex\Models\ClientAccount;
 use Modules\Forex\Models\LedgerEntry;
 use Modules\Forex\Models\Mt5Command;
+use Modules\Forex\Models\Mt5Quote;
 use Modules\Forex\Models\Position;
 
 class Trading
@@ -56,6 +57,8 @@ class Trading
             throw new InvalidArgumentException('Quantity is too small.');
         }
 
+        $account = $this->terminalAccount($user);
+        $this->assertLotSize($account, $symbol, $quantity);
         $quote = $this->quoteFor($user, $symbol);
 
         if ($quote === null) {
@@ -64,15 +67,15 @@ class Trading
             );
         }
 
-        $account = $this->terminalAccount($user);
         $entry = $side === 'buy' ? $quote['ask'] : $quote['bid'];
         $this->requireFreeMargin($user, $account, $symbol, $quantity, $entry);
         $stopLoss = $this->optionalPrice($options['stop_loss'] ?? null);
         $takeProfit = $this->optionalPrice($options['take_profit'] ?? null);
         $this->assertLevels($side, $quote['bid'], $quote['ask'], $stopLoss, $takeProfit);
+        $cuts = $this->lotCuts($account, $quantity);
         $commission = isset($options['commission']) && is_numeric($options['commission'])
             ? round((float) $options['commission'], 2)
-            : 0.0;
+            : $cuts['customer'];
 
         $position = Position::query()->create([
             'desk_ticket' => Position::nextDeskTicket(),
@@ -89,6 +92,7 @@ class Trading
             'stop_loss' => $stopLoss,
             'take_profit' => $takeProfit,
             'commission' => $commission,
+            'partner_commission' => $cuts['partner'],
             'profit' => 0,
         ]);
 
@@ -130,6 +134,7 @@ class Trading
         }
 
         $account = $this->terminalAccount($user);
+        $this->assertLotSize($account, $symbol, $quantity);
         $quote = $this->quoteFor($user, $symbol);
 
         if ($quote === null) {
@@ -361,10 +366,15 @@ class Trading
             }
 
             $entry = str_starts_with((string) $order->order_type, 'buy') ? $quote['ask'] : $quote['bid'];
+            $cuts = $order->clientAccount === null
+                ? ['customer' => 0.0, 'partner' => 0.0]
+                : $this->lotCuts($order->clientAccount, (float) $order->quantity);
 
             $order->forceFill([
                 'status' => Position::STATUS_OPEN,
                 'entry_price' => $entry,
+                'commission' => $cuts['customer'],
+                'partner_commission' => $cuts['partner'],
                 'profit' => 0,
             ])->save();
         }
@@ -552,6 +562,8 @@ class Trading
             $this->ledger->post($account, [
                 'type' => LedgerEntry::TYPE_TRADE,
                 'amount' => $net,
+                'desk_ticket' => $ticket,
+                'mt5_ticket' => $position->mt5_ticket,
                 'note' => sprintf(
                     'Close %s %s %s %.2f lots',
                     $ticket,
@@ -633,12 +645,50 @@ class Trading
         return $quantity * $contract * $price;
     }
 
+    private function assertLotSize(ClientAccount $account, string $symbol, float $quantity): void
+    {
+        $limit = Mt5Quote::query()
+            ->where('mt5_account_id', $account->mt5_account_id)
+            ->where('symbol', $symbol)
+            ->first(['volume_min', 'volume_step']);
+        $rule = MarketWatch::lotLimit($limit?->volume_min, $limit?->volume_step);
+        $minimum = (float) $rule['min_lot'];
+        $step = (float) $rule['lot_step'];
+        $steps = $step > 0 ? round($quantity / $step) : 0;
+        $offStep = abs($quantity - ($steps * $step)) > 0.0001;
+
+        if ($quantity + 0.0000001 < $minimum || $offStep) {
+            throw new InvalidArgumentException($rule['lot_note'] !== ''
+                ? $rule['lot_note']
+                : 'Quantity is too small.');
+        }
+    }
+
+    /**
+     * @return array{customer: float, partner: float}
+     */
+    private function lotCuts(ClientAccount $account, float $quantity): array
+    {
+        $account->loadMissing('mt5Account');
+        $lots = round($quantity, 2);
+        $pool = $account->mt5Account;
+
+        return [
+            'customer' => round(max(0, (float) ($pool?->customer_rate ?? 0)) * $lots, 2),
+            'partner' => round(max(0, (float) ($pool?->partner_rate ?? 0)) * $lots, 2),
+        ];
+    }
+
     private function terminalAccount(User $user): ClientAccount
     {
         $account = $user->clientAccount;
 
-        if ($account === null || $account->mt5_account_id === null || ! $account->active) {
+        if ($account === null || $account->mt5_account_id === null) {
             throw new InvalidArgumentException('This login has no MT5 account, so the order was not placed.');
+        }
+
+        if ($account->archived_at !== null || ! $account->active) {
+            throw new InvalidArgumentException('This account is disabled, so the order was not placed.');
         }
 
         return $account;

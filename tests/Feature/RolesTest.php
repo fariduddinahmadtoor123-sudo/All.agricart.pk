@@ -35,7 +35,7 @@ class RolesTest extends TestCase
             ->assertOk()
             ->assertSee('Roles')
             ->assertSee('Add new role')
-            ->assertSee('No roles yet.')
+            ->assertSee('Super admin')
             ->assertSee('Open in new tab', false);
     }
 

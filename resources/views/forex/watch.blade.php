@@ -11,6 +11,14 @@
         </button>
         <div class="arrow-scroll min-h-0 flex-1" data-arrow-scroll>
             <table class="w-full table-fixed text-left text-xs sm:text-sm">
+                <colgroup>
+                    <col class="w-[38%]">
+                    <col>
+                    <col>
+                    <col>
+                    <col>
+                    <col>
+                </colgroup>
                 <thead class="sticky top-0 z-10 bg-soft">
                     <tr>
                         <th class="px-2 py-2 font-semibold sm:px-4" scope="col">Symbol</th>
@@ -24,7 +32,13 @@
                 <tbody>
                     @foreach ($quotes as $quote)
                         <tr class="border-t border-line" data-quote-row="{{ $quote['symbol'] }}" data-live="{{ $quote['live'] ? '1' : '0' }}">
-                            <td class="px-2 py-2 font-semibold sm:px-4">{{ $quote['symbol'] }}</td>
+                            <td class="px-2 py-2 sm:px-4">
+                                <span class="font-semibold">{{ $quote['symbol'] }}</span>
+                                @php($symbolName = \Modules\Forex\Support\Symbols::name($quote['symbol']))
+                                @if ($symbolName !== '')
+                                    <span class="ml-2 text-[11px] font-normal leading-tight text-ink/60">{{ $symbolName }}</span>
+                                @endif
+                            </td>
                             <td class="px-2 py-2 text-right tabular-nums sm:px-4" data-q="bid">{{ $quote['bid'] }}</td>
                             <td class="px-2 py-2 text-right tabular-nums sm:px-4" data-q="ask">{{ $quote['ask'] }}</td>
                             <td class="px-2 py-2 text-right tabular-nums sm:px-4" data-q="high">{{ $quote['high'] }}</td>

@@ -62,6 +62,35 @@ class Symbols
         return in_array(strtoupper($symbol), self::allowed(), true);
     }
 
+    public static function name(string $symbol): string
+    {
+        return self::names()[strtoupper($symbol)] ?? '';
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function names(): array
+    {
+        return [
+            'EURUSD' => 'Euro versus United States Dollar',
+            'GBPUSD' => 'British Pound versus United States Dollar',
+            'USDJPY' => 'United States Dollar versus Japanese Yen',
+            'USDCHF' => 'United States Dollar versus Swiss Franc',
+            'AUDUSD' => 'Australian Dollar versus United States Dollar',
+            'NZDUSD' => 'New Zealand Dollar versus United States Dollar',
+            'USDCAD' => 'United States Dollar versus Canadian Dollar',
+            'EURGBP' => 'Euro versus British Pound',
+            'XAUUSD' => 'Gold versus United States Dollar',
+            'XAGUSD' => 'Silver versus United States Dollar',
+            'XTIUSD' => 'WTI Crude Oil versus United States Dollar',
+            'BTCUSD' => 'Bitcoin versus United States Dollar',
+            'ETHUSD' => 'Ethereum versus United States Dollar',
+            'US30' => 'Dow Jones Industrial Average',
+            'NAS100' => 'Nasdaq 100',
+        ];
+    }
+
     public static function categoryFor(string $symbol): ?string
     {
         $symbol = strtoupper($symbol);

@@ -11,15 +11,9 @@
         <header class="border-b border-line bg-card">
             <div class="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-6">
                 <a href="{{ url('/') }}" class="text-lg font-semibold tracking-wide">Desk</a>
-                <div class="flex items-center gap-3">
-                    @guest
-                        <a href="{{ route('login') }}" class="rounded-xl border border-line bg-canvas px-4 py-2 text-sm font-semibold">Log in</a>
-                    @endguest
-                    <form method="POST" action="{{ route('enter') }}">
-                        @csrf
-                        <button type="submit" class="rounded-xl bg-primary px-4 py-2 text-sm font-semibold">Dashboard</button>
-                    </form>
-                </div>
+                @guest
+                    <a href="{{ route('login') }}" class="rounded-xl border border-line bg-canvas px-4 py-2 text-sm font-semibold">Log in</a>
+                @endguest
             </div>
         </header>
 
@@ -30,7 +24,7 @@
         <footer class="border-t border-line bg-card">
             <div class="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-5 text-sm text-ink/70">
                 <p>Desk</p>
-                <p>Online store</p>
+                <a href="{{ route('register') }}" class="font-semibold text-ink">Register</a>
             </div>
         </footer>
     </body>

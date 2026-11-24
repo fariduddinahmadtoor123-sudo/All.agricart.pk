@@ -84,7 +84,8 @@ class ForexMt5ExecutionTest extends TestCase
             ->assertOk()
             ->assertSee('TA-100001')
             ->assertSee('10.00')
-            ->assertSee('MT5 pending');
+            ->assertSee('D-100001')
+            ->assertDontSee('MT5 pending');
 
         $this->postJson('/api/forex/connector/executions', [
             'mt5_account_id' => (string) $mt5->id,
@@ -106,7 +107,20 @@ class ForexMt5ExecutionTest extends TestCase
         $this->actingAs($user)
             ->get(route('forex.market-watch'))
             ->assertOk()
-            ->assertSee('MT5 88991');
+            ->assertSee('D-100001')
+            ->assertDontSee('MT5 88991');
+
+        $this->assertDatabaseHas('forex_ledger_entries', [
+            'client_account_id' => $client->id,
+            'desk_ticket' => 'D-100001',
+            'mt5_ticket' => '88991',
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('forex.ledger.show', $client))
+            ->assertOk()
+            ->assertSee('D-100001')
+            ->assertSee('88991');
     }
 
     public function test_a_rejected_mt5_order_stays_on_the_desk_ticket(): void

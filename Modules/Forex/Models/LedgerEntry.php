@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['client_account_id', 'type', 'amount', 'balance_after', 'note', 'created_by'])]
+#[Fillable(['client_account_id', 'type', 'amount', 'balance_after', 'note', 'from_place', 'to_place', 'desk_ticket', 'mt5_ticket', 'created_by'])]
 class LedgerEntry extends Model
 {
     public const TYPE_DEPOSIT = 'deposit';

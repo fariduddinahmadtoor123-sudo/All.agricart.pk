@@ -122,6 +122,10 @@ class Mt5Commands
             'entry_price' => $price > 0 ? $price : $position->trigger_price,
             'profit' => 0,
         ])->save();
+
+        if ($ticket !== '' && $position->clientAccount !== null) {
+            app(Ledger::class)->rememberTicket($position->clientAccount, $position->fresh());
+        }
     }
 
     /**
@@ -226,6 +230,14 @@ class Mt5Commands
             if ($fill !== []) {
                 $position->forceFill($fill)->save();
                 $position->refresh();
+            }
+
+            if (isset($fill['mt5_ticket'])) {
+                $position->loadMissing('clientAccount');
+
+                if ($position->clientAccount !== null) {
+                    app(Ledger::class)->rememberTicket($position->clientAccount, $position);
+                }
             }
 
             if ($command->action === 'open' && $position->closed_at !== null && $ticket !== '') {

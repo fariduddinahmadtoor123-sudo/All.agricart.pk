@@ -14,6 +14,10 @@ use Illuminate\Support\Str;
     'server',
     'login',
     'active',
+    'partner_rate',
+    'customer_rate',
+    'deactivated_reason',
+    'deactivated_at',
     'connector_token',
     'last_seen_at',
     'mt5_balance',
@@ -24,6 +28,20 @@ use Illuminate\Support\Str;
 ])]
 class Mt5Account extends Model
 {
+    /**
+     * Why a live broker account was switched off. The row stays.
+     *
+     * @var array<string, string>
+     */
+    public const REASONS = [
+        'moved' => 'Moved to another account',
+        'blown' => 'Balance blown',
+        'stop_out' => 'Stop out',
+        'dormant' => 'Dormant',
+        'broker_closed' => 'Broker closed the account',
+        'compliance' => 'Compliance hold',
+    ];
+
     protected $table = 'forex_mt5_accounts';
 
     protected static function booted(): void
@@ -42,6 +60,11 @@ class Mt5Account extends Model
         }
 
         return (string) $this->connector_token;
+    }
+
+    public function reasonLabel(): string
+    {
+        return self::REASONS[$this->deactivated_reason] ?? '';
     }
 
     public function connectorIsOnline(): bool
@@ -72,6 +95,9 @@ class Mt5Account extends Model
     {
         return [
             'active' => 'boolean',
+            'partner_rate' => 'float',
+            'customer_rate' => 'float',
+            'deactivated_at' => 'datetime',
             'last_seen_at' => 'datetime',
             'mt5_balance' => 'float',
             'mt5_equity' => 'float',

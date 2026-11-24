@@ -3,9 +3,12 @@
 namespace Modules\Forex\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
+use Carbon\CarbonInterface;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\View\View;
 use InvalidArgumentException;
@@ -14,17 +17,22 @@ use Modules\Forex\Http\Requests\CloseOrderRequest;
 use Modules\Forex\Http\Requests\ClosePositionsRequest;
 use Modules\Forex\Http\Requests\OpenPositionsRequest;
 use Modules\Forex\Http\Requests\PlacePendingOrderRequest;
+use Modules\Forex\Http\Requests\StoreTerminalPaymentRequest;
 use Modules\Forex\Http\Requests\UpdateOrderLevelsRequest;
 use Modules\Forex\Http\Requests\UpdateWatchlistRequest;
+use Modules\Forex\Models\ClientAccount;
+use Modules\Forex\Models\Payment;
 use Modules\Forex\Models\Position;
+use Modules\Forex\Support\Ledger;
 use Modules\Forex\Support\MarketWatch;
 use Modules\Forex\Support\Symbols;
 use Modules\Forex\Support\Trading;
+use Modules\Forex\Support\WalletBook;
 use Modules\Forex\Support\Watchlist;
 
 class MarketWatchController extends Controller
 {
-    public function __invoke(Request $request): View
+    public function __invoke(Request $request, Ledger $ledger): View
     {
         $user = $request->user();
         $gateQuotes = MarketWatch::gateRows($user);
@@ -46,7 +54,49 @@ class MarketWatchController extends Controller
             'groupedSymbols' => Symbols::groupedAllowed(),
             'liveSymbols' => $liveBySymbol,
             'feedOnline' => MarketWatch::onlineFeed($user) !== null,
+            ...$this->terminalMoney($user, $ledger),
         ]);
+    }
+
+    public function ledger(Request $request, Ledger $ledger): View
+    {
+        return view('forex.terminal.ledger', [
+            'user' => $request->user(),
+            ...$this->terminalMoney($request->user(), $ledger),
+        ]);
+    }
+
+    public function payments(Request $request, WalletBook $wallets): View
+    {
+        return view('forex.terminal.payments', [
+            'user' => $request->user(),
+            'clientAccount' => $request->user()->clientAccount,
+            'wallet' => $wallets->open($request->user()),
+        ]);
+    }
+
+    public function storePayment(StoreTerminalPaymentRequest $request, WalletBook $wallets): RedirectResponse
+    {
+        $account = $request->user()->clientAccount;
+        $withdrawal = $request->string('type')->toString() === 'withdrawal';
+
+        try {
+            if ($withdrawal) {
+                $wallets->toWallet($account, $request->validated('amount'), $request->user());
+            } else {
+                $wallets->toAccount($account, $request->validated('amount'), $request->user());
+            }
+        } catch (InvalidArgumentException $exception) {
+            return back()
+                ->withInput()
+                ->withErrors(['amount' => $exception->getMessage()]);
+        }
+
+        $back = $request->input('return') === 'page'
+            ? route('forex.market-watch.payments')
+            : route('forex.market-watch');
+
+        return redirect($back)->with('status', $withdrawal ? 'Moved into the wallet.' : 'Moved into the account.');
     }
 
     public function quotes(Request $request): JsonResponse
@@ -192,6 +242,30 @@ class MarketWatchController extends Controller
         }
 
         return redirect()->route('forex.market-watch');
+    }
+
+    /**
+     * @return array{clientAccount: ?ClientAccount, ledgerLines: list<array<string, mixed>>, paymentRequests: Collection<int, Payment>, profit: array{profit: string, tone: string}, openedAt: CarbonInterface}
+     */
+    private function terminalMoney(User $user, Ledger $ledger): array
+    {
+        $account = $user->clientAccount;
+        $figures = $account ? $ledger->figures([$account->id]) : [];
+
+        return [
+            'clientAccount' => $account,
+            'wallet' => app(WalletBook::class)->open($user),
+            'ledgerLines' => $account ? $ledger->moneyLines($account) : [],
+            'paymentRequests' => $account
+                ? Payment::query()
+                    ->where('client_account_id', $account->id)
+                    ->whereIn('status', [Payment::STATUS_PENDING, Payment::STATUS_REJECTED])
+                    ->latest('id')
+                    ->get()
+                : collect(),
+            'profit' => $account ? ($figures[$account->id] ?? ['profit' => '0.00', 'tone' => '']) : ['profit' => '0.00', 'tone' => ''],
+            'openedAt' => now(),
+        ];
     }
 
     private function tradeBack(Request $request, ?string $error = null): RedirectResponse|JsonResponse

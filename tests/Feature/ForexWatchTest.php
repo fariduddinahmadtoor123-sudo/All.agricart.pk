@@ -30,7 +30,9 @@ class ForexWatchTest extends TestCase
                 'Trade Terminal',
             ], false)
             ->assertSee('EURUSD')
+            ->assertSee('Euro versus United States Dollar')
             ->assertSee('XAUUSD')
+            ->assertSee('Gold versus United States Dollar')
             ->assertSee('BTCUSD')
             ->assertSee('US30')
             ->assertSee('Waiting for connector')

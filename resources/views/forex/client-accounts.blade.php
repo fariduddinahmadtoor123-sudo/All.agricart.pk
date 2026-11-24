@@ -1,6 +1,11 @@
 <x-layouts.shell title="Client accounts" :user="$user">
     <x-slot:panel>
         <button type="button" data-window-open="client-account-window" class="rounded-xl bg-card px-4 py-2 text-sm font-semibold">Open account</button>
+        @if ($archived)
+            <a href="{{ route('forex.client-accounts') }}" class="rounded-xl border border-line bg-card px-4 py-2 text-sm font-semibold">Current accounts</a>
+        @else
+            <a href="{{ route('forex.client-accounts', ['archived' => 1]) }}" class="rounded-xl border border-line bg-card px-4 py-2 text-sm font-semibold">Archived</a>
+        @endif
     </x-slot:panel>
 
     <div class="overflow-hidden rounded-2xl border border-line bg-card">
@@ -13,6 +18,7 @@
                     <th class="px-4 py-3 text-right font-semibold sm:px-6">Balance</th>
                     <th class="px-4 py-3 font-semibold sm:px-6">Leverage</th>
                     <th class="px-4 py-3 font-semibold sm:px-6">MT5 account</th>
+                    <th class="px-4 py-3 font-semibold sm:px-6">Status</th>
                     <th class="px-4 py-3 text-right font-semibold sm:px-6">Actions</th>
                 </tr>
             </thead>
@@ -26,15 +32,46 @@
                         <td class="px-4 py-4 tabular-nums sm:px-6">1:{{ $account->leverage }}</td>
                         <td class="px-4 py-4 sm:px-6">{{ $account->mt5Account?->name ?: 'Not linked' }}</td>
                         <td class="px-4 py-4 sm:px-6">
+                            @if ($account->archived_at !== null)
+                                Archived
+                            @elseif ($account->active)
+                                On
+                            @else
+                                Disabled
+                            @endif
+                        </td>
+                        <td class="px-4 py-4 sm:px-6">
                             <div class="flex flex-wrap justify-end gap-2">
                                 <button type="button" data-window-open="client-edit-{{ $account->id }}" class="rounded-xl border border-line bg-canvas px-3 py-2 text-sm font-semibold">Edit</button>
                                 <button type="button" data-window-open="client-pay-{{ $account->id }}" class="rounded-xl border border-line bg-canvas px-3 py-2 text-sm font-semibold">Add payment</button>
+                                @if ($account->archived_at !== null)
+                                    <form method="POST" action="{{ route('forex.client-accounts.restore', $account) }}">
+                                        @csrf
+                                        <button type="submit" class="rounded-xl border border-line bg-canvas px-3 py-2 text-sm font-semibold">Restore</button>
+                                    </form>
+                                @else
+                                    @if ($account->active)
+                                        <form method="POST" action="{{ route('forex.client-accounts.disable', $account) }}">
+                                            @csrf
+                                            <button type="submit" class="rounded-xl border border-line bg-canvas px-3 py-2 text-sm font-semibold">Disable</button>
+                                        </form>
+                                    @else
+                                        <form method="POST" action="{{ route('forex.client-accounts.enable', $account) }}">
+                                            @csrf
+                                            <button type="submit" class="rounded-xl border border-line bg-canvas px-3 py-2 text-sm font-semibold">Enable</button>
+                                        </form>
+                                    @endif
+                                    <form method="POST" action="{{ route('forex.client-accounts.archive', $account) }}">
+                                        @csrf
+                                        <button type="submit" class="rounded-xl border border-line bg-canvas px-3 py-2 text-sm font-semibold">Archive</button>
+                                    </form>
+                                @endif
                             </div>
                         </td>
                     </tr>
                 @empty
                     <tr>
-                        <td class="px-4 py-10 text-ink/70 sm:px-6" colspan="7">No client accounts yet.</td>
+                        <td class="px-4 py-10 text-ink/70 sm:px-6" colspan="8">{{ $archived ? 'No archived accounts.' : 'No client accounts yet.' }}</td>
                     </tr>
                 @endforelse
             </tbody>

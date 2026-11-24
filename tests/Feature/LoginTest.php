@@ -16,11 +16,11 @@ class LoginTest extends TestCase
             ->assertOk()
             ->assertSee('Log in')
             ->assertSee('Sign in and Home opens.')
-            ->assertSee('admin@gmail.com')
-            ->assertSee('value="admin"', false);
+            ->assertDontSee('admin@gmail.com')
+            ->assertDontSee('value="admin"', false);
     }
 
-    public function test_open_dashboard_signs_in_the_admin(): void
+    public function test_the_admin_signs_in_with_a_password(): void
     {
         User::factory()->create([
             'name' => 'Admin',
@@ -30,12 +30,16 @@ class LoginTest extends TestCase
 
         $this->get('/')
             ->assertOk()
-            ->assertSee('Dashboard')
+            ->assertDontSee('>Dashboard<', false)
+            ->assertSee('Register')
             ->assertSee('The online store will appear here, inshallah.')
             ->assertDontSee('New system')
             ->assertDontSee('#F5EBE0');
 
-        $this->post('/enter')->assertRedirect('/dashboard');
+        $this->post('/login', [
+            'email' => 'admin@gmail.com',
+            'password' => 'admin',
+        ])->assertRedirect('/dashboard');
 
         $this->get('/dashboard')->assertOk()->assertSee('Welcome, Admin.');
     }

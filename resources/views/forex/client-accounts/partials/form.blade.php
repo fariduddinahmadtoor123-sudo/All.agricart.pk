@@ -36,8 +36,9 @@
         @enderror
     </label>
     <label class="flex flex-col gap-2 text-sm font-semibold">
-        Amount
+        Payment
         <input name="amount" type="number" min="0" step="0.01" value="{{ old('amount', '10000') }}" required class="rounded-xl border border-line bg-canvas px-4 py-3 text-base font-normal outline-none focus:border-ink">
+        <span class="text-xs font-normal text-ink/60">Opening payment. More payments can be added on the account later. Use 0 when there is no payment yet.</span>
         @error('amount')
             <span class="text-sm font-normal">{{ $message }}</span>
         @enderror

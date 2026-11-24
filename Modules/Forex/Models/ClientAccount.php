@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\DB;
 
-#[Fillable(['number', 'user_id', 'mt5_account_id', 'balance', 'leverage', 'active'])]
+#[Fillable(['number', 'user_id', 'mt5_account_id', 'balance', 'leverage', 'active', 'archived_at'])]
 class ClientAccount extends Model
 {
     protected $table = 'forex_client_accounts';
@@ -57,6 +57,7 @@ class ClientAccount extends Model
             'balance' => 'float',
             'leverage' => 'integer',
             'active' => 'boolean',
+            'archived_at' => 'datetime',
         ];
     }
 }

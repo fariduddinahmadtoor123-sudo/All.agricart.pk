@@ -10,7 +10,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('forex_positions', function (Blueprint $table) {
-            $table->string('status', 16)->default('open')->after('side');
+            $table->string('status', 16)->default('open')->after('symbol');
             $table->string('order_type', 16)->default('market')->after('status');
             $table->decimal('trigger_price', 18, 8)->nullable()->after('entry_price');
         });

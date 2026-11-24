@@ -150,6 +150,16 @@ html[data-corners] :is(.rounded-2xl, .desk-window:not(.is-max)) {
     border-radius: var(--desk-radius-lg);
 }
 
+.desk-top-bar {
+    position: relative;
+    z-index: 30;
+}
+
+.desk-user-bar {
+    position: relative;
+    z-index: 20;
+}
+
 .desk-window {
     position: fixed;
     z-index: 30;

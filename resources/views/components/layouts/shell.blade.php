@@ -36,7 +36,7 @@
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
     <body class="flex h-screen flex-col bg-canvas font-sans text-ink antialiased">
-        <header class="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-line bg-card px-3 sm:px-6">
+        <header class="desk-top-bar flex h-12 shrink-0 items-center justify-between gap-3 border-b border-line bg-card px-3 sm:px-6">
             <div class="flex min-w-0 items-center gap-3">
                 <x-section-tag number="1" name="Top" />
                 <p class="text-lg font-semibold tracking-wide">Desk</p>
@@ -83,6 +83,10 @@
                         request()->routeIs('settings') => [
                             ['label' => 'Settings'],
                         ],
+                        request()->routeIs('personal-vault') => [
+                            ['label' => 'Trade Terminal', 'route' => 'forex.market-watch'],
+                            ['label' => 'Personal wallet'],
+                        ],
                         request()->routeIs('forex.mt5-accounts.create') => [
                             ['label' => 'Forex Trading', 'route' => 'forex.market-watch'],
                             ['label' => 'MT5 accounts', 'route' => 'forex.mt5-accounts'],
@@ -101,14 +105,38 @@
                             ['label' => 'Forex Trading', 'route' => 'forex.market-watch'],
                             ['label' => 'Client accounts'],
                         ],
+                        request()->routeIs('forex.payments.create') => [
+                            ['label' => 'Forex Trading', 'route' => 'forex.market-watch'],
+                            ['label' => 'Forex Pending Payments', 'route' => 'forex.payments'],
+                            ['label' => 'Add request'],
+                        ],
+                        request()->routeIs('forex.payments*') => [
+                            ['label' => 'Forex Trading', 'route' => 'forex.market-watch'],
+                            ['label' => 'Forex Pending Payments'],
+                        ],
                         request()->routeIs('forex.ledger.create') => [
                             ['label' => 'Forex Trading', 'route' => 'forex.market-watch'],
-                            ['label' => 'Ledger', 'route' => 'forex.ledger'],
+                            ['label' => 'Forex Customer Ledgers', 'route' => 'forex.ledger'],
                             ['label' => 'Post entry'],
+                        ],
+                        request()->routeIs('forex.ledger.show') => [
+                            ['label' => 'Forex Trading', 'route' => 'forex.market-watch'],
+                            ['label' => 'Forex Customer Ledgers', 'route' => 'forex.ledger'],
+                            ['label' => request()->route('account')->number ?? 'Account'],
                         ],
                         request()->routeIs('forex.ledger*') => [
                             ['label' => 'Forex Trading', 'route' => 'forex.market-watch'],
-                            ['label' => 'Ledger'],
+                            ['label' => 'Forex Customer Ledgers'],
+                        ],
+                        request()->routeIs('forex.market-watch.ledger') => [
+                            ['label' => 'Forex Trading', 'route' => 'forex.market-watch'],
+                            ['label' => 'Trade Terminal', 'route' => 'forex.market-watch'],
+                            ['label' => 'Account ledger'],
+                        ],
+                        request()->routeIs('forex.market-watch.payments') => [
+                            ['label' => 'Forex Trading', 'route' => 'forex.market-watch'],
+                            ['label' => 'Trade Terminal', 'route' => 'forex.market-watch'],
+                            ['label' => 'Payment requests'],
                         ],
                         request()->routeIs('forex.watch') => [
                             ['label' => 'Forex Trading', 'route' => 'forex.market-watch'],
@@ -137,13 +165,20 @@
                     @endforeach
                 </nav>
             </div>
-            <div class="flex shrink-0 items-center gap-2 sm:gap-4">
-                <p class="hidden text-sm sm:block">{{ $user->name }}</p>
-                <form method="POST" action="{{ route('logout') }}">
-                    @csrf
-                    <button type="submit" class="rounded-xl border border-line bg-canvas px-3 py-1.5 text-sm font-semibold">Log out</button>
-                </form>
-            </div>
+            <details class="relative shrink-0">
+                <summary class="flex cursor-pointer list-none items-center gap-1 rounded-xl bg-soft px-3 py-1.5 text-sm font-semibold [&::-webkit-details-marker]:hidden">
+                    <span class="max-w-40 truncate">{{ $user->name }}</span>
+                    <svg viewBox="0 0 16 16" class="h-3.5 w-3.5" aria-hidden="true"><path d="M3.5 6 8 10.5 12.5 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                </summary>
+                <div class="absolute right-0 z-30 mt-1 w-56 rounded-xl border border-line bg-card p-1 shadow">
+                    <a href="{{ route('forex.market-watch') }}" class="block rounded-lg px-3 py-2 text-sm hover:bg-soft">Trade Terminal</a>
+                    <a href="{{ route('personal-vault') }}" class="block rounded-lg px-3 py-2 text-sm hover:bg-soft">Personal wallet</a>
+                    <form method="POST" action="{{ route('logout') }}">
+                        @csrf
+                        <button type="submit" class="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-soft">Log out</button>
+                    </form>
+                </div>
+            </details>
         </header>
 
         <div class="flex min-h-0 flex-1">
@@ -161,6 +196,7 @@
                 </button>
                 <nav id="side-menu" class="side-menu flex min-h-0 flex-1 flex-col gap-1" aria-label="Side">
                 @foreach (\App\Support\DeskMenu::items() as $item)
+                    @continue(! $user->isSuperAdmin() && ! in_array($item['key'], ['dashboard', 'forex', 'personal-vault'], true))
                     <x-side-link :href="route($item['route'], $item['parameters'])" :current="\App\Support\DeskMenu::isCurrent($item)">
                         {{ $item['label'] }}
                         @if ($item['soon'])
@@ -192,13 +228,14 @@
                         'docs' => [
                             ['route' => 'notes', 'label' => 'Notes', 'active' => 'notes*'],
                         ],
-                        'forex' => [
+                        'forex' => array_values(array_filter([
                             ['route' => 'forex.watch', 'label' => 'Market Watch', 'active' => 'forex.watch'],
-                            ['route' => 'forex.market-watch', 'label' => 'Trade Terminal', 'active' => 'forex.market-watch'],
-                            ['route' => 'forex.client-accounts', 'label' => 'Client accounts', 'active' => 'forex.client-accounts*'],
-                            ['route' => 'forex.mt5-accounts', 'label' => 'MT5 accounts', 'active' => 'forex.mt5-accounts*'],
-                            ['route' => 'forex.ledger', 'label' => 'Ledger', 'active' => 'forex.ledger*'],
-                        ],
+                            ['route' => 'forex.market-watch', 'label' => 'Trade Terminal', 'active' => 'forex.market-watch*'],
+                            $user->isSuperAdmin() ? ['route' => 'forex.client-accounts', 'label' => 'Client accounts', 'active' => 'forex.client-accounts*'] : null,
+                            $user->isSuperAdmin() ? ['route' => 'forex.mt5-accounts', 'label' => 'MT5 accounts', 'active' => 'forex.mt5-accounts*'] : null,
+                            $user->isSuperAdmin() ? ['route' => 'forex.ledger', 'label' => 'Forex Customer Ledgers', 'active' => 'forex.ledger*'] : null,
+                            $user->isSuperAdmin() ? ['route' => 'forex.payments', 'label' => 'Forex Pending Payments', 'active' => 'forex.payments*'] : null,
+                        ])),
                     ];
                 @endphp
                 <section aria-label="Menu" class="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-soft px-3 py-2 sm:px-6">
@@ -218,7 +255,7 @@
                     </nav>
                 </section>
 
-                <section aria-label="{{ $title }}" class="flex min-h-12 shrink-0 flex-wrap items-center gap-2 border-b border-line bg-primary px-3 py-1.5 sm:px-6">
+                <section aria-label="{{ $title }}" class="desk-user-bar flex min-h-12 shrink-0 flex-wrap items-center gap-2 border-b border-line bg-primary px-3 py-1.5 sm:px-6">
                     @if ($heading)
                         <p class="shrink-0 text-sm font-semibold tracking-wide">{{ $title }}</p>
                     @endif
@@ -230,6 +267,26 @@
                     @isset($panel)
                         <div class="flex shrink-0 items-center gap-2">{{ $panel }}</div>
                     @endisset
+                    @if ($accountMenu ?? null)
+                        <details class="relative shrink-0">
+                            <summary class="flex cursor-pointer list-none items-center gap-1 rounded-xl bg-card px-3 py-1.5 text-sm font-semibold [&::-webkit-details-marker]:hidden">
+                                <span class="max-w-40 truncate tabular-nums" data-meter="Account"><span data-meter-value>{{ $accountMenu['number'] }}</span></span>
+                                <svg viewBox="0 0 16 16" class="h-3.5 w-3.5" aria-hidden="true"><path d="M3.5 6 8 10.5 12.5 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                            </summary>
+                            <div class="absolute right-0 z-30 mt-1 w-56 rounded-xl border border-line bg-card p-1 shadow">
+                                <div class="px-3 py-2 text-sm">
+                                    <p class="flex items-center justify-between gap-3" data-meter="Leverage">
+                                        <span>Leverage</span>
+                                        <span class="font-semibold tabular-nums" data-meter-value>{{ $accountMenu['leverage'] }}</span>
+                                    </p>
+                                    <p class="mt-1 flex items-center justify-between gap-3" data-meter="Margin level">
+                                        <span>Margin level</span>
+                                        <span class="font-semibold tabular-nums" data-meter-value>{{ $accountMenu['marginLevel'] }}</span>
+                                    </p>
+                                </div>
+                            </div>
+                        </details>
+                    @endif
                 </section>
 
                 <div id="desk-stage" class="flex min-h-0 flex-1 flex-col">

@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['mt5_account_id', 'symbol', 'bid', 'ask', 'high', 'low', 'spread', 'digits', 'tick_at'])]
+#[Fillable(['mt5_account_id', 'symbol', 'bid', 'ask', 'high', 'low', 'spread', 'digits', 'volume_min', 'volume_step', 'tick_at'])]
 class Mt5Quote extends Model
 {
     protected $table = 'forex_mt5_quotes';
@@ -31,6 +31,8 @@ class Mt5Quote extends Model
             'low' => 'float',
             'spread' => 'float',
             'digits' => 'integer',
+            'volume_min' => 'float',
+            'volume_step' => 'float',
             'tick_at' => 'datetime',
         ];
     }

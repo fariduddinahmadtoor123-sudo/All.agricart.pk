@@ -88,7 +88,6 @@ class ConnectorSyncController extends Controller
             $digits = isset($tick['digits']) && is_numeric($tick['digits'])
                 ? max(0, min(8, (int) $tick['digits']))
                 : null;
-
             $rows[$symbol] = [
                 'mt5_account_id' => $account->id,
                 'symbol' => $symbol,
@@ -102,6 +101,14 @@ class ConnectorSyncController extends Controller
                 'created_at' => $now,
                 'updated_at' => $now,
             ];
+
+            if (isset($tick['volume_min']) && is_numeric($tick['volume_min'])) {
+                $rows[$symbol]['volume_min'] = round(max(0.01, (float) $tick['volume_min']), 2);
+            }
+
+            if (isset($tick['volume_step']) && is_numeric($tick['volume_step'])) {
+                $rows[$symbol]['volume_step'] = round(max(0.01, (float) $tick['volume_step']), 2);
+            }
         }
 
         $snapshot = $this->accountSnapshot($request->input('account'));
@@ -111,10 +118,26 @@ class ConnectorSyncController extends Controller
         }
 
         if ($rows !== []) {
+            $update = ['bid', 'ask', 'high', 'low', 'spread', 'digits', 'tick_at', 'updated_at'];
+
+            foreach (['volume_min', 'volume_step'] as $limit) {
+                $complete = collect($rows)->every(fn (array $row): bool => array_key_exists($limit, $row));
+
+                if ($complete) {
+                    $update[] = $limit;
+
+                    continue;
+                }
+
+                foreach ($rows as $symbol => $row) {
+                    unset($rows[$symbol][$limit]);
+                }
+            }
+
             Mt5Quote::query()->upsert(
                 array_values($rows),
                 ['mt5_account_id', 'symbol'],
-                ['bid', 'ask', 'high', 'low', 'spread', 'digits', 'tick_at', 'updated_at'],
+                $update,
             );
         }
 

@@ -24,6 +24,7 @@ use Illuminate\Support\Facades\DB;
     'stop_loss',
     'take_profit',
     'commission',
+    'partner_commission',
     'profit',
     'closed_at',
 ])]
@@ -89,6 +90,7 @@ class Position extends Model
             'stop_loss' => 'decimal:8',
             'take_profit' => 'decimal:8',
             'commission' => 'decimal:2',
+            'partner_commission' => 'decimal:2',
             'profit' => 'decimal:2',
             'closed_at' => 'datetime',
         ];

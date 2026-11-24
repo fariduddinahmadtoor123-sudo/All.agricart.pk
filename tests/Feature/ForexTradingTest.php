@@ -24,6 +24,34 @@ class ForexTradingTest extends TestCase
         $this->get('/forex/market-watch')->assertRedirect('/login');
     }
 
+    public function test_the_user_menu_holds_the_account_leverage_and_margin_level(): void
+    {
+        $user = User::factory()->create();
+        ClientAccount::query()->create([
+            'number' => 'TA-100001',
+            'user_id' => $user->id,
+            'balance' => 1000,
+            'leverage' => 200,
+            'active' => true,
+        ]);
+
+        $html = $this->actingAs($user)
+            ->get(route('forex.market-watch'))
+            ->assertOk()
+            ->assertSeeInOrder(['Personal wallet', 'TA-100001', 'Leverage', '1:200', 'Margin level'])
+            ->getContent();
+
+        $this->assertSame(1, substr_count($html, 'data-meter="Account"'));
+        $this->assertSame(1, substr_count($html, 'data-meter="Leverage"'));
+        $this->assertSame(1, substr_count($html, 'data-meter="Margin level"'));
+
+        $this->actingAs($user)
+            ->get(route('forex.mt5-accounts'))
+            ->assertOk()
+            ->assertDontSee('data-meter="Account"', false)
+            ->assertDontSee('TA-100001');
+    }
+
     public function test_a_user_opens_forex_trading(): void
     {
         $user = User::factory()->create();
@@ -45,13 +73,16 @@ class ForexTradingTest extends TestCase
             ->assertSee('Sell = 0.00')
             ->assertSee('Buy = 0.00')
             ->assertSeeInOrder(['Balance', 'Equity', 'P/L', 'Margin', 'Free margin'])
-            ->assertSee('10,000.00')
+            ->assertDontSee('data-meter="Account"', false)
+            ->assertDontSee('10,000.00')
             ->assertSee('0.00')
             ->assertDontSee('text-sm font-semibold tracking-wide">Market Watch', false)
             ->assertSee('Market sessions')
             ->assertSeeInOrder(['Sydney', 'Tokyo', 'London', 'New York'])
             ->assertSee('Liquidity')
             ->assertSee('Fast trading')
+            ->assertDontSee('arm a row, then one click buys or sells.')
+            ->assertDontSee('waiting for connector')
             ->assertDontSee('Check all')
             ->assertDontSee('Uncheck all')
             ->assertSee('Arm EURUSD')
@@ -59,6 +90,8 @@ class ForexTradingTest extends TestCase
             ->assertSee('Buy EURUSD')
             ->assertSee('Sell EURUSD')
             ->assertSee('My Wishlist')
+            ->assertSee('data-window-open="terminal-ledger"', false)
+            ->assertSee('data-window-open="terminal-payments"', false)
             ->assertSee('Forex')
             ->assertSee('Commodities')
             ->assertSee('Crypto')
@@ -187,6 +220,46 @@ class ForexTradingTest extends TestCase
         $this->assertSame(0.0, (float) $opened->first()->profit);
         $this->assertSame('D-100001', $opened->first()->desk_ticket);
         $this->assertNull($opened->first()->mt5_ticket);
+    }
+
+    public function test_us30_shows_its_minimum_lot_and_refuses_a_smaller_order(): void
+    {
+        $user = User::factory()->create();
+        $feed = $this->seedLiveQuote('US30', 40000, 40002, 2);
+        $this->attachTerminal($user, $feed);
+        Mt5Quote::query()->where('symbol', 'US30')->update([
+            'volume_min' => 0.10,
+            'volume_step' => 0.10,
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('forex.market-watch'))
+            ->assertOk()
+            ->assertDontSee('Minimum 0.10 lots on this symbol.');
+
+        $this->actingAs($user)
+            ->followingRedirects()
+            ->post(route('forex.positions.open'), [
+                'armed' => '1',
+                'symbol' => 'US30',
+                'side' => 'buy',
+                'quantity' => '0.01',
+            ])
+            ->assertOk()
+            ->assertSee('Minimum 0.10 lots on this symbol.');
+
+        $this->assertSame(0, Position::query()->where('user_id', $user->id)->count());
+
+        $this->actingAs($user)
+            ->post(route('forex.positions.open'), [
+                'armed' => '1',
+                'symbol' => 'US30',
+                'side' => 'buy',
+                'quantity' => '0.10',
+            ])
+            ->assertRedirect(route('forex.market-watch'));
+
+        $this->assertSame('0.10', Position::query()->where('user_id', $user->id)->value('quantity'));
     }
 
     public function test_sell_opens_one_sell_at_the_typed_quantity(): void

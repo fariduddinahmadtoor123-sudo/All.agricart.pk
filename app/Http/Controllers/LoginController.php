@@ -18,16 +18,6 @@ class LoginController extends Controller
         return view('auth.login');
     }
 
-    public function enter(Request $request): RedirectResponse
-    {
-        $user = User::query()->where('email', 'admin@gmail.com')->firstOrFail();
-
-        Auth::login($user);
-        $request->session()->regenerate();
-
-        return redirect()->route('dashboard');
-    }
-
     public function store(LoginRequest $request): RedirectResponse
     {
         $request->ensureIsNotRateLimited();
@@ -37,6 +27,20 @@ class LoginController extends Controller
 
             throw ValidationException::withMessages([
                 'email' => __('auth.failed'),
+            ]);
+        }
+
+        $user = $request->user();
+
+        if ($user instanceof User && $user->status !== User::STATUS_ACTIVE) {
+            Auth::logout();
+
+            $message = $user->status === User::STATUS_REJECTED
+                ? 'This registration was rejected. '.($user->rejection_reason ?: 'Send it again from Register.')
+                : 'This registration is waiting for approval.';
+
+            throw ValidationException::withMessages([
+                'email' => $message,
             ]);
         }
 

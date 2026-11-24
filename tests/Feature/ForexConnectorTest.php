@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Role;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Modules\Forex\Models\Mt5Account;
@@ -101,6 +102,8 @@ class ForexConnectorTest extends TestCase
                     'low' => 1.084,
                     'spread' => 0.0002,
                     'digits' => 5,
+                    'volume_min' => 0.01,
+                    'volume_step' => 0.01,
                     'time_msc' => (int) (microtime(true) * 1000),
                 ],
                 [
@@ -111,6 +114,8 @@ class ForexConnectorTest extends TestCase
                     'low' => 2640,
                     'spread' => 0.3,
                     'digits' => 2,
+                    'volume_min' => 0.01,
+                    'volume_step' => 0.01,
                     'time_msc' => (int) (microtime(true) * 1000),
                 ],
                 [
@@ -136,6 +141,7 @@ class ForexConnectorTest extends TestCase
         $this->assertSame(12610.20, (float) $fresh->mt5_equity);
         $this->assertSame(2, Mt5Quote::query()->count());
         $this->assertSame(5, Mt5Quote::query()->where('symbol', 'EURUSD')->value('digits'));
+        $this->assertSame(0.01, (float) Mt5Quote::query()->where('symbol', 'EURUSD')->value('volume_min'));
 
         $viewer = User::factory()->create();
 
@@ -144,7 +150,8 @@ class ForexConnectorTest extends TestCase
             ->assertOk()
             ->assertSee('1.08510')
             ->assertSee('2650.10')
-            ->assertSee('10,000.00')
+            ->assertDontSee('10,000.00')
+            ->assertSee('0.00')
             ->assertDontSee('12,610.20');
 
         $this->actingAs($viewer)
@@ -177,6 +184,8 @@ class ForexConnectorTest extends TestCase
         $this->actingAs($user)
             ->get(route('forex.mt5-accounts'))
             ->assertOk()
+            ->assertSee('Download connector')
+            ->assertSee(route('forex.mt5-accounts.connector', Mt5Account::query()->first()), false)
             ->assertSee('Prepare on this PC')
             ->assertSee('Start connector')
             ->assertSee('Offline');
@@ -203,6 +212,38 @@ class ForexConnectorTest extends TestCase
         $this->assertFileExists($bat);
         $this->assertFileExists(dirname($bat).DIRECTORY_SEPARATOR.'mt5_bridge.py');
         $this->assertStringContainsString('laragon\\bin\\python', file_get_contents($bat));
+    }
+
+    public function test_a_customer_cannot_take_the_connector_or_the_ledgers(): void
+    {
+        $role = Role::query()->create([
+            'name' => 'Customer',
+            'description' => 'Trades only.',
+        ]);
+        $customer = User::factory()->create(['role_id' => $role->id]);
+        $account = Mt5Account::query()->create([
+            'name' => 'Pool A',
+            'broker' => 'Demo Broker',
+            'server' => 'Demo-Server',
+            'login' => '501234',
+            'active' => true,
+        ]);
+
+        $this->get(route('forex.mt5-accounts.connector', $account))
+            ->assertRedirect('/login');
+
+        $this->actingAs($customer)
+            ->get(route('forex.mt5-accounts.connector', $account))
+            ->assertForbidden();
+
+        $this->actingAs($customer)
+            ->get(route('forex.ledger'))
+            ->assertForbidden();
+
+        $this->actingAs($customer)
+            ->get(route('forex.market-watch'))
+            ->assertOk()
+            ->assertDontSee('MT5 accounts');
     }
 
     public function test_the_package_detects_laragon_python(): void

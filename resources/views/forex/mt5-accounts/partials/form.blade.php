@@ -30,6 +30,22 @@
         @enderror
     </label>
     <label class="flex flex-col gap-2 text-sm font-semibold">
+        Partner rate
+        <input name="partner_rate" type="number" min="0" step="0.01" value="{{ old('partner_rate', '0.00') }}" required class="rounded-xl border border-line bg-canvas px-4 py-3 text-base font-normal outline-none focus:border-ink">
+        <span class="text-sm font-normal text-ink/70">USD per lot the broker takes from this account.</span>
+        @error('partner_rate')
+            <span class="text-sm font-normal">{{ $message }}</span>
+        @enderror
+    </label>
+    <label class="flex flex-col gap-2 text-sm font-semibold">
+        Customer rate
+        <input name="customer_rate" type="number" min="0" step="0.01" value="{{ old('customer_rate', '0.00') }}" required class="rounded-xl border border-line bg-canvas px-4 py-3 text-base font-normal outline-none focus:border-ink">
+        <span class="text-sm font-normal text-ink/70">USD per lot taken from the customer when a trade opens.</span>
+        @error('customer_rate')
+            <span class="text-sm font-normal">{{ $message }}</span>
+        @enderror
+    </label>
+    <label class="flex flex-col gap-2 text-sm font-semibold">
         Login
         <input name="login" type="text" value="{{ old('login') }}" required autocomplete="off" inputmode="numeric" placeholder="MT5 account number" class="rounded-xl border border-line bg-canvas px-4 py-3 text-base font-normal outline-none focus:border-ink">
         @error('login')

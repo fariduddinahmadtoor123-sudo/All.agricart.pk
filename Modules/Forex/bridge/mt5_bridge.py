@@ -55,6 +55,7 @@ SYMBOLS = [
 QUOTES: dict[str, dict] = {}
 QUOTES_LOCK = threading.Lock()
 DIGITS: dict[str, int] = {}
+LIMITS: dict[str, tuple[float, float]] = {}
 RANGES: dict[str, tuple[float, float]] = {}
 PUBLISH: queue.Queue = queue.Queue(1)
 LAST_ATTACHED = 0.0
@@ -342,6 +343,26 @@ def watched_symbols() -> list[str]:
     return names
 
 
+def volume_limits(symbol: str) -> tuple[float, float]:
+    cached = LIMITS.get(symbol)
+    if cached:
+        return cached
+
+    info = mt5.symbol_info(symbol)
+    minimum = 0.01
+    step = 0.01
+    if info is not None:
+        raw_min = float(getattr(info, "volume_min", 0) or 0)
+        raw_step = float(getattr(info, "volume_step", 0) or 0)
+        if raw_min > 0:
+            minimum = raw_min
+        if raw_step > 0:
+            step = raw_step
+
+    LIMITS[symbol] = (round(minimum, 2), round(step, 2))
+    return LIMITS[symbol]
+
+
 def digits_for(symbol: str) -> int:
     cached = DIGITS.get(symbol)
     if cached:
@@ -375,6 +396,7 @@ def refresh_quotes() -> None:
 
         desk = RESOLVED_MAP.get(symbol, symbol.upper())
         digits = digits_for(symbol)
+        minimum, step = volume_limits(symbol)
         high, low = RANGES.get(desk, (tick.bid, tick.bid))
         high = max(high, tick.bid, tick.ask)
         low = min(low, tick.bid, tick.ask)
@@ -388,6 +410,8 @@ def refresh_quotes() -> None:
             "low": round(float(low), digits),
             "spread": round(float(tick.ask - tick.bid), digits),
             "digits": digits,
+            "volume_min": minimum,
+            "volume_step": step,
             "time_msc": int(tick.time_msc),
             "received_ms": now_ms,
         }
@@ -570,7 +594,12 @@ def send_open(cmd: dict) -> dict:
     side = str(cmd.get("side") or "buy")
     order_type = str(cmd.get("order_type") or "market")
     volume = round(float(cmd.get("volume") or 0), 2)
-    if volume < 0.01:
+    minimum, step = volume_limits(symbol)
+    steps = round(volume / step) if step else 0
+    if volume + 1e-8 < minimum or abs(volume - (steps * step)) > 0.0001:
+        shown = f"{minimum:.2f}"
+        if minimum > 0.01:
+            return command_result(cmd, False, error=f"Minimum {shown} lots on this symbol.")
         return command_result(cmd, False, error="Volume is too small.")
 
     pending = {
@@ -905,6 +934,8 @@ def quote_board() -> dict:
             "low": price_text(low, digits),
             "range": price_text(max(0.0, high - low), digits),
             "time": time.strftime("%H:%M:%S", time.gmtime(stamp or time.time())),
+            "min_lot": f"{float(tick.get('volume_min') or 0.01):.2f}",
+            "lot_step": f"{float(tick.get('volume_step') or 0.01):.2f}",
             "live": True,
             "broker_open": True,
         })

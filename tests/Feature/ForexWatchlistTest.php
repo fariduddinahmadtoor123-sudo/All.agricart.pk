@@ -39,7 +39,8 @@ class ForexWatchlistTest extends TestCase
             ->assertSee('BTCUSD')
             ->assertSee('XAUUSD')
             ->assertSee('EURUSD')
-            ->assertSee('Fast trading: arm a row, then one click buys or sells.', false);
+            ->assertDontSee('Fast trading: arm a row, then one click buys or sells.', false)
+            ->assertDontSee('waiting for connector', false);
     }
 
     public function test_watchlist_order_and_contents_persist_for_that_user_only(): void
