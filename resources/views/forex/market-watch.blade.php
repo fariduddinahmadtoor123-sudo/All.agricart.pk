@@ -2,7 +2,7 @@
     <x-slot:meters>
         @foreach ($account as $meter)
             @continue(in_array($meter['label'], ['Account', 'Leverage', 'Margin level'], true))
-            <div class="flex h-8 shrink-0 items-center gap-2 rounded-xl border border-line bg-white px-2.5 text-black" data-meter="{{ $meter['label'] }}">
+            <div class="flex h-8 shrink-0 items-center gap-2 rounded-xl border border-line bg-card px-2.5 text-ink" data-meter="{{ $meter['label'] }}">
                 <span class="text-xs font-medium">{{ $meter['label'] }}</span>
                 <span
                     data-meter-value
@@ -22,7 +22,7 @@
                 <input type="checkbox" id="fast-trade-master" class="h-4 w-4" aria-label="Fast trading">
                 Fast trading
             </label>
-            <div id="market-sessions" class="flex h-8 min-w-44 flex-col justify-center gap-1 rounded-xl border border-line bg-white px-2 text-black" aria-label="Market sessions">
+            <div id="market-sessions" class="flex h-8 min-w-44 flex-col justify-center gap-1 rounded-xl border border-line bg-card px-2 text-ink" aria-label="Market sessions">
                 <div class="flex items-center gap-1">
                     @foreach ($sessions as $session)
                         <span

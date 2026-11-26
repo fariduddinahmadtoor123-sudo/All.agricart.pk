@@ -5,7 +5,6 @@ namespace Tests\Feature;
 use App\Enums\AiLogType;
 use App\Enums\AiProvider;
 use App\Models\AiConfiguration;
-use App\Models\AiLog;
 use App\Models\User;
 use App\Support\Ai\DeskAi;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -27,7 +26,11 @@ class AiSettingsTest extends TestCase
             ->assertSee('No model connected')
             ->assertSee('Activity')
             ->assertSee('Load models')
-            ->assertSee('OpenRouter');
+            ->assertSee('formnovalidate', false)
+            ->assertSee('OpenRouter')
+            ->assertSee('DeepSeek V4.1 Flash')
+            ->assertSee('Cheap models to keep')
+            ->assertSee('AI is off. It is not connected.', false);
     }
 
     public function test_models_can_be_loaded_from_openrouter(): void
@@ -104,7 +107,9 @@ class AiSettingsTest extends TestCase
             ->assertSee('Connection test')
             ->assertSee('GPT-4o Mini')
             ->assertSee('Activity')
-            ->assertSee('Change connection');
+            ->assertSee('Change connection')
+            ->assertDontSee('sk-or-test-key-123456')
+            ->assertDontSee('••••');
 
         $this->actingAs($user)->get('/settings/ai-logs')
             ->assertRedirect('/settings/ai#activity');
@@ -212,5 +217,96 @@ class AiSettingsTest extends TestCase
             'type' => AiLogType::ConnectionTest->value,
             'status' => 'error',
         ]);
+    }
+
+    public function test_a_saved_connection_answers_a_test_question(): void
+    {
+        Http::fake([
+            'openrouter.ai/api/v1/chat/completions' => Http::response([
+                'choices' => [
+                    ['message' => ['content' => 'Desk is connected.']],
+                ],
+            ], 200),
+        ]);
+
+        AiConfiguration::query()->create([
+            'provider' => AiProvider::OpenRouter,
+            'api_key' => 'sk-or-test-key-123456',
+            'model_id' => 'deepseek/deepseek-v4.1-flash',
+            'model_name' => 'DeepSeek V4.1 Flash',
+            'is_active' => true,
+            'connection_status' => 'connected',
+        ]);
+
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->from('/settings/ai')
+            ->post('/settings/ai/ask', [
+                'question' => 'Are you there?',
+            ])
+            ->assertRedirect('/settings/ai')
+            ->assertSessionHas('ai_answer', 'Desk is connected.');
+    }
+
+    public function test_finished_credits_show_on_the_top_bar(): void
+    {
+        Http::fake([
+            'openrouter.ai/api/v1/chat/completions' => Http::response([
+                'error' => ['message' => 'Insufficient credits. Add more credits.'],
+            ], 402),
+        ]);
+
+        AiConfiguration::query()->create([
+            'provider' => AiProvider::OpenRouter,
+            'api_key' => 'sk-or-test-key-123456',
+            'model_id' => 'deepseek/deepseek-v4.1-flash',
+            'model_name' => 'DeepSeek V4.1 Flash',
+            'is_active' => true,
+            'connection_status' => 'connected',
+        ]);
+
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->from('/settings/ai')
+            ->post('/settings/ai/ask', [
+                'question' => 'Are you there?',
+            ])
+            ->assertRedirect('/settings/ai');
+
+        $this->assertSame('credits', AiConfiguration::query()->firstOrFail()->connection_status);
+
+        $this->actingAs($user)
+            ->get('/dashboard')
+            ->assertOk()
+            ->assertSee('AI credits are finished.', false);
+    }
+
+    public function test_loaded_models_keep_the_key_off_the_page_and_offer_the_cheap_pick(): void
+    {
+        Http::fake([
+            'openrouter.ai/api/v1/models' => Http::response([
+                'data' => [
+                    ['id' => 'deepseek/deepseek-v4.1-flash', 'name' => 'DeepSeek V4.1 Flash'],
+                    ['id' => 'openai/gpt-4o-mini', 'name' => 'GPT-4o Mini'],
+                ],
+            ], 200),
+        ]);
+
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->from('/settings/ai')
+            ->followingRedirects()
+            ->post('/settings/ai/models', [
+                'provider' => 'openrouter',
+                'api_key' => 'sk-or-test-key-123456',
+            ])
+            ->assertOk()
+            ->assertDontSee('sk-or-test-key-123456')
+            ->assertSee('data-model-preferred', false)
+            ->assertSee('DeepSeek V4.1 Flash')
+            ->assertSee('All models');
     }
 }

@@ -32,7 +32,7 @@ class MenuTest extends TestCase
             'Finance',
             'Marketplace',
             'Docs',
-            'Personal Vault',
+            'Forex Wallet',
             'Forex Trading',
             'External Apps',
             'Settings',

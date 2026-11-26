@@ -40,6 +40,21 @@ html[data-theme='stone'] {
     --color-ink: #2e2a26;
 }
 
+html[data-mode='dark'] {
+    color-scheme: dark;
+    --color-canvas: #1c1917;
+    --color-card: #292524;
+    --color-soft: #44403c;
+    --color-line: #57534e;
+    --color-primary: #a89080;
+    --color-ink: #f5f0eb;
+}
+
+html:not([data-mode='dark']) [data-mode-choice='light'],
+html[data-mode='dark'] [data-mode-choice='dark'] {
+    background: var(--color-primary);
+}
+
 .side-rail {
     width: 3.25rem;
     transition: width 180ms ease;
@@ -230,6 +245,40 @@ html[data-corners] :is(.rounded-2xl, .desk-window:not(.is-max)) {
     width: 16px;
     height: 16px;
     cursor: nwse-resize;
+}
+
+.ai-status {
+    position: relative;
+    display: grid;
+    height: 2.25rem;
+    width: 2.25rem;
+    place-items: center;
+    border-radius: 0.75rem;
+    background: var(--color-soft);
+    color: var(--color-ink);
+}
+
+.ai-signal {
+    position: absolute;
+    right: 0.35rem;
+    bottom: 0.35rem;
+    width: 0.45rem;
+    height: 0.45rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-ink) 35%, transparent);
+}
+
+.ai-signal-on {
+    background: #2f7d32;
+}
+
+.ai-signal-paused {
+    background: #a16207;
+}
+
+.ai-signal-credits,
+.ai-signal-failed {
+    background: #b42318;
 }
 
 .desk-resize-se::before {

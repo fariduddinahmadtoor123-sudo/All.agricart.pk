@@ -201,7 +201,7 @@ class DeskSubmenus
                 'key' => 'personal-vault',
                 'patterns' => ['personal-vault', 'personal-vault.*'],
                 'items' => [
-                    ['route' => 'personal-vault', 'label' => 'My box', 'built' => true],
+                    ['route' => 'personal-vault', 'label' => 'Forex Wallet', 'built' => true],
                     ['route' => 'personal-vault.all-boxes', 'label' => 'All boxes', 'path' => '/personal-vault/all-boxes', 'title' => 'All boxes'],
                 ],
             ],

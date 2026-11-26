@@ -38,12 +38,14 @@ class ForexTradingTest extends TestCase
         $html = $this->actingAs($user)
             ->get(route('forex.market-watch'))
             ->assertOk()
-            ->assertSeeInOrder(['Personal wallet', 'TA-100001', 'Leverage', '1:200', 'Margin level'])
+            ->assertSeeInOrder(['TA-100001', 'Leverage', '1:200', 'Margin level'])
             ->getContent();
 
         $this->assertSame(1, substr_count($html, 'data-meter="Account"'));
         $this->assertSame(1, substr_count($html, 'data-meter="Leverage"'));
         $this->assertSame(1, substr_count($html, 'data-meter="Margin level"'));
+        $this->assertSame(2, substr_count($html, 'data-mode-choice="dark"'));
+        $this->assertStringNotContainsString('Personal wallet', $html);
 
         $this->actingAs($user)
             ->get(route('forex.mt5-accounts'))

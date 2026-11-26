@@ -92,6 +92,11 @@ class AiConfiguration extends Model
         return $this->connection_status === 'paused';
     }
 
+    public function isOutOfCredit(): bool
+    {
+        return $this->connection_status === 'credits';
+    }
+
     public function displayName(): string
     {
         return $this->model_name ?: $this->model_id;

@@ -357,13 +357,6 @@ if (stage && dock) {
     stageObserver.observe(stage);
 }
 
-const inkFor = (hex) => {
-    const color = Number.parseInt(hex.replace('#', ''), 16);
-    const light = (((color >> 16) & 255) * 299 + ((color >> 8) & 255) * 587 + (color & 255) * 114) / 1000;
-
-    return light > 150 ? '#3a322b' : '#f7f6f2';
-};
-
 const markScheme = (id) => {
     document.querySelectorAll('[data-scheme-id]').forEach((button) => {
         const pressed = button.dataset.schemeId === String(id);
@@ -384,14 +377,9 @@ const applyScheme = (button) => {
     };
     const root = document.documentElement;
 
-    root.style.setProperty('--color-canvas', scheme.page);
-    root.style.setProperty('--color-card', scheme.card);
-    root.style.setProperty('--color-soft', scheme.soft);
-    root.style.setProperty('--color-line', scheme.line);
-    root.style.setProperty('--color-primary', scheme.primary);
-    root.style.setProperty('--color-ink', inkFor(scheme.page));
     localStorage.setItem('desk-scheme', JSON.stringify(scheme));
     markScheme(scheme.id);
+    window.deskPaintScheme?.(scheme, root.dataset.mode === 'dark' ? 'dark' : 'light');
 };
 
 const clearScheme = () => {
@@ -432,6 +420,34 @@ document.querySelectorAll('[data-corner]').forEach((button) => {
 });
 
 markCorners(document.documentElement.dataset.corners || 'round');
+
+const applyMode = (mode) => {
+    const next = mode === 'dark' ? 'dark' : 'light';
+    const root = document.documentElement;
+
+    root.dataset.mode = next;
+    localStorage.setItem('desk-mode', next);
+
+    const saved = localStorage.getItem('desk-scheme');
+
+    if (! saved) {
+        ['--color-canvas', '--color-card', '--color-soft', '--color-line', '--color-primary', '--color-ink'].forEach((name) => {
+            root.style.removeProperty(name);
+        });
+
+        return;
+    }
+
+    try {
+        window.deskPaintScheme?.(JSON.parse(saved), next);
+    } catch (error) {
+        localStorage.removeItem('desk-scheme');
+    }
+};
+
+document.querySelectorAll('[data-mode-choice]').forEach((button) => {
+    button.addEventListener('click', () => applyMode(button.dataset.modeChoice));
+});
 
 const savedScheme = localStorage.getItem('desk-scheme');
 const schemeList = document.querySelector('[data-scheme-list]');

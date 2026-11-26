@@ -3,12 +3,14 @@
 namespace App\Providers;
 
 use App\Http\Controllers\MenuStubController;
+use App\Support\Ai\AiConfigurationService;
 use App\Support\DeskSubmenus;
 use App\Support\ModuleRegistry;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
 
@@ -31,6 +33,10 @@ class AppServiceProvider extends ServiceProvider
             $email = Str::transliterate(Str::lower($request->string('email')->toString()));
 
             return Limit::perMinute(5)->by($email.'|'.$request->ip());
+        });
+
+        View::composer('components.layouts.shell', function ($view): void {
+            $view->with('aiStatus', app(AiConfigurationService::class)->shellState());
         });
 
         foreach (DeskSubmenus::stubRoutes() as $stub) {

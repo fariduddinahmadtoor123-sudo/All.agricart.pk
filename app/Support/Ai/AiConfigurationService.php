@@ -46,8 +46,8 @@ class AiConfigurationService
      */
     private function fromEnvFallback(): ?AiConfiguration
     {
-        $key = (string) env('OPENROUTER_API_KEY', '');
-        $model = (string) env('OPENROUTER_MODEL', '');
+        $key = (string) config('services.openrouter.key', '');
+        $model = (string) config('services.openrouter.model', '');
 
         if ($key === '' || $model === '') {
             return null;
@@ -240,9 +240,83 @@ class AiConfigurationService
         );
 
         $configuration->update([
-            'connection_status' => $result['success'] ? 'connected' : 'failed',
+            'connection_status' => $this->statusFromResult($result),
             'last_test_message' => $result['message'],
             'last_tested_at' => now(),
         ]);
+    }
+
+    /**
+     * What the top bar should say, without the API key.
+     *
+     * @return array{state: string, label: string}
+     */
+    public function shellState(): array
+    {
+        $configuration = $this->active();
+
+        if ($configuration === null) {
+            return [
+                'state' => 'off',
+                'label' => 'AI is off. It is not connected.',
+            ];
+        }
+
+        $message = $this->clip((string) $configuration->last_test_message);
+        $model = $configuration->displayName();
+
+        if ($configuration->isPaused()) {
+            return [
+                'state' => 'paused',
+                'label' => 'AI is off. '.($message !== '' ? $message : 'Paused in Settings.'),
+            ];
+        }
+
+        if ($configuration->isOutOfCredit() || AiFailure::isOutOfCredit($message)) {
+            return [
+                'state' => 'credits',
+                'label' => 'AI credits are finished. '.($message !== '' ? $message : 'Add credits on OpenRouter.'),
+            ];
+        }
+
+        if ($configuration->connection_status === 'failed') {
+            return [
+                'state' => 'failed',
+                'label' => 'AI is not working. '.($message !== '' ? $message : 'Check the key and model.'),
+            ];
+        }
+
+        if ($configuration->isConnected()) {
+            return [
+                'state' => 'on',
+                'label' => 'AI is on — '.$model,
+            ];
+        }
+
+        return [
+            'state' => 'off',
+            'label' => 'AI is saved, not confirmed — '.$model,
+        ];
+    }
+
+    /**
+     * @param  array{success: bool, message: string, http_status?: int|null}  $result
+     */
+    public function statusFromResult(array $result): string
+    {
+        if ($result['success']) {
+            return 'connected';
+        }
+
+        if (AiFailure::isOutOfCredit($result['message'], $result['http_status'] ?? null)) {
+            return 'credits';
+        }
+
+        return 'failed';
+    }
+
+    private function clip(string $text): string
+    {
+        return mb_substr(trim($text), 0, 180);
     }
 }

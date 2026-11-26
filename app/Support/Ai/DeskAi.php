@@ -104,6 +104,8 @@ class DeskAi
             $durationMs,
         );
 
+        $this->rememberOutcome($configuration, $result);
+
         return $result;
     }
 
@@ -115,6 +117,22 @@ class DeskAi
     public function forexAssist(string $prompt, string $source = 'forex'): array
     {
         return $this->ask($prompt, $source, AiLogType::ForexAssist, 600);
+    }
+
+    /**
+     * @param  array{success: bool, message: string, http_status?: int|null}  $result
+     */
+    private function rememberOutcome(AiConfiguration $configuration, array $result): void
+    {
+        if (! $configuration->exists || $configuration->isPaused()) {
+            return;
+        }
+
+        $configuration->update([
+            'connection_status' => $this->configurations->statusFromResult($result),
+            'last_test_message' => $result['success'] ? 'AI replied.' : $result['message'],
+            'last_tested_at' => now(),
+        ]);
     }
 
     /**

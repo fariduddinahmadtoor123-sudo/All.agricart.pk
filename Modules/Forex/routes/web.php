@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Modules\Forex\Http\Controllers\CalendarController;
 use Modules\Forex\Http\Controllers\ClientAccountsController;
 use Modules\Forex\Http\Controllers\ForexTradingController;
 use Modules\Forex\Http\Controllers\LedgerController;
@@ -23,6 +24,7 @@ Route::get('/forex/market-watch/payments', [MarketWatchController::class, 'payme
 Route::post('/forex/market-watch/payments', [MarketWatchController::class, 'storePayment'])->name('forex.market-watch.payments.store');
 Route::get('/forex/market-watch', MarketWatchController::class)->name('forex.market-watch');
 Route::get('/forex/watch', WatchController::class)->name('forex.watch');
+Route::get('/forex/calendar', CalendarController::class)->name('forex.calendar');
 
 Route::middleware('super')->group(function (): void {
     Route::get('/forex/mt5-accounts/create', [Mt5AccountsController::class, 'create'])->name('forex.mt5-accounts.create');

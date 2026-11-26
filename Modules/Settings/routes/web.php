@@ -21,6 +21,8 @@ Route::middleware('super')->group(function (): void {
     Route::get('/colors', ColorsController::class)->name('colors');
     Route::get('/settings/ai', AiSettingsController::class)->name('settings.ai');
     Route::post('/settings/ai/models', [AiSettingsController::class, 'loadModels'])->name('settings.ai.models');
+    Route::post('/settings/ai/ask', [AiSettingsController::class, 'ask'])->middleware('throttle:20,1')->name('settings.ai.ask');
+    Route::post('/settings/ai/ask-draft', [AiSettingsController::class, 'askDraft'])->middleware('throttle:20,1')->name('settings.ai.ask-draft');
     Route::post('/settings/ai', [AiSettingsController::class, 'store'])->name('settings.ai.store');
     Route::post('/settings/ai/test', [AiSettingsController::class, 'test'])->name('settings.ai.test');
     Route::post('/settings/ai/pause', [AiSettingsController::class, 'pause'])->name('settings.ai.pause');

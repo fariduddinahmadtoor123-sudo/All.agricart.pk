@@ -8,6 +8,154 @@
         <title>{{ $title }} — {{ config('app.name', 'Desk') }}</title>
         <script>
             (() => {
+                const root = document.documentElement;
+
+                const channels = (hex) => {
+                    const raw = String(hex).replace('#', '').trim();
+                    const full = raw.length === 3 ? raw.split('').map((part) => part + part).join('') : raw;
+                    const color = Number.parseInt(full, 16);
+
+                    if (! Number.isFinite(color) || full.length !== 6) {
+                        return null;
+                    }
+
+                    return { r: (color >> 16) & 255, g: (color >> 8) & 255, b: color & 255 };
+                };
+
+                const toHsl = ({ r, g, b }) => {
+                    const rn = r / 255;
+                    const gn = g / 255;
+                    const bn = b / 255;
+                    const max = Math.max(rn, gn, bn);
+                    const min = Math.min(rn, gn, bn);
+                    const lightness = (max + min) / 2;
+
+                    if (max === min) {
+                        return { h: 0, s: 0, l: lightness * 100 };
+                    }
+
+                    const delta = max - min;
+                    const saturation = lightness > 0.5 ? delta / (2 - max - min) : delta / (max + min);
+                    let hue = 0;
+
+                    if (max === rn) {
+                        hue = (gn - bn) / delta + (gn < bn ? 6 : 0);
+                    } else if (max === gn) {
+                        hue = (bn - rn) / delta + 2;
+                    } else {
+                        hue = (rn - gn) / delta + 4;
+                    }
+
+                    return { h: hue * 60, s: saturation * 100, l: lightness * 100 };
+                };
+
+                const hueToRgb = (p, q, t) => {
+                    let channel = t;
+
+                    if (channel < 0) {
+                        channel += 1;
+                    }
+
+                    if (channel > 1) {
+                        channel -= 1;
+                    }
+
+                    if (channel < 1 / 6) {
+                        return p + (q - p) * 6 * channel;
+                    }
+
+                    if (channel < 1 / 2) {
+                        return q;
+                    }
+
+                    if (channel < 2 / 3) {
+                        return p + (q - p) * (2 / 3 - channel) * 6;
+                    }
+
+                    return p;
+                };
+
+                const fromHsl = (h, s, l) => {
+                    const sn = Math.max(0, Math.min(100, s)) / 100;
+                    const ln = Math.max(0, Math.min(100, l)) / 100;
+                    const hn = (((h % 360) + 360) % 360) / 360;
+                    let r;
+                    let g;
+                    let b;
+
+                    if (sn === 0) {
+                        r = ln;
+                        g = ln;
+                        b = ln;
+                    } else {
+                        const q = ln < 0.5 ? ln * (1 + sn) : ln + sn - ln * sn;
+                        const p = 2 * ln - q;
+
+                        r = hueToRgb(p, q, hn + 1 / 3);
+                        g = hueToRgb(p, q, hn);
+                        b = hueToRgb(p, q, hn - 1 / 3);
+                    }
+
+                    const part = (value) => Math.round(value * 255).toString(16).padStart(2, '0');
+
+                    return `#${part(r)}${part(g)}${part(b)}`;
+                };
+
+                const darkenSurface = (hex) => {
+                    const rgb = channels(hex);
+
+                    if (! rgb) {
+                        return hex;
+                    }
+
+                    const { h, s, l } = toHsl(rgb);
+                    const saturation = s < 6 ? 0 : Math.min(Math.max(s * 0.65, 10), 36);
+
+                    return fromHsl(h, saturation, 11 + ((100 - l) / 100) * 34);
+                };
+
+                const darkenPrimary = (hex) => {
+                    const rgb = channels(hex);
+
+                    if (! rgb) {
+                        return hex;
+                    }
+
+                    const { h, s } = toHsl(rgb);
+
+                    return fromHsl(h, Math.max(s, 28), 56);
+                };
+
+                window.deskPaintScheme = (scheme, mode) => {
+                    if (mode !== 'dark') {
+                        const rgb = channels(scheme.page);
+                        const light = rgb ? (rgb.r * 299 + rgb.g * 587 + rgb.b * 114) / 1000 : 200;
+
+                        root.style.setProperty('--color-canvas', scheme.page);
+                        root.style.setProperty('--color-card', scheme.card);
+                        root.style.setProperty('--color-soft', scheme.soft);
+                        root.style.setProperty('--color-line', scheme.line);
+                        root.style.setProperty('--color-primary', scheme.primary);
+                        root.style.setProperty('--color-ink', light > 150 ? '#3a322b' : '#f7f6f2');
+
+                        return;
+                    }
+
+                    const page = channels(scheme.page);
+                    const hsl = page ? toHsl(page) : { h: 30, s: 12 };
+
+                    root.style.setProperty('--color-canvas', darkenSurface(scheme.page));
+                    root.style.setProperty('--color-card', darkenSurface(scheme.card));
+                    root.style.setProperty('--color-soft', darkenSurface(scheme.soft));
+                    root.style.setProperty('--color-line', darkenSurface(scheme.line));
+                    root.style.setProperty('--color-primary', darkenPrimary(scheme.primary));
+                    root.style.setProperty('--color-ink', fromHsl(hsl.h, Math.min(hsl.s, 18), 94));
+                };
+
+                const mode = localStorage.getItem('desk-mode') === 'dark' ? 'dark' : 'light';
+
+                root.dataset.mode = mode;
+
                 const saved = localStorage.getItem('desk-scheme');
 
                 if (! saved) {
@@ -15,18 +163,7 @@
                 }
 
                 try {
-                    const scheme = JSON.parse(saved);
-                    const root = document.documentElement;
-                    const value = scheme.page.replace('#', '');
-                    const color = Number.parseInt(value, 16);
-                    const light = (((color >> 16) & 255) * 299 + ((color >> 8) & 255) * 587 + (color & 255) * 114) / 1000;
-
-                    root.style.setProperty('--color-canvas', scheme.page);
-                    root.style.setProperty('--color-card', scheme.card);
-                    root.style.setProperty('--color-soft', scheme.soft);
-                    root.style.setProperty('--color-line', scheme.line);
-                    root.style.setProperty('--color-primary', scheme.primary);
-                    root.style.setProperty('--color-ink', light > 150 ? '#3a322b' : '#f7f6f2');
+                    window.deskPaintScheme(JSON.parse(saved), mode);
                 } catch (error) {
                     localStorage.removeItem('desk-scheme');
                 }
@@ -92,8 +229,7 @@
                             ['label' => 'Settings'],
                         ],
                         request()->routeIs('personal-vault') => [
-                            ['label' => 'Trade Terminal', 'route' => 'forex.market-watch'],
-                            ['label' => 'Personal wallet'],
+                            ['label' => 'Forex Wallet'],
                         ],
                         request()->routeIs('forex.mt5-accounts.create') => [
                             ['label' => 'Forex Trading', 'route' => 'forex.market-watch'],
@@ -150,6 +286,10 @@
                             ['label' => 'Forex Trading', 'route' => 'forex.market-watch'],
                             ['label' => 'Market Watch'],
                         ],
+                        request()->routeIs('forex.calendar') => [
+                            ['label' => 'Forex Trading', 'route' => 'forex.market-watch'],
+                            ['label' => 'Calendar'],
+                        ],
                         request()->routeIs('forex*') => [
                             ['label' => 'Forex Trading', 'route' => 'forex.market-watch'],
                             ['label' => 'Trade Terminal'],
@@ -173,20 +313,22 @@
                     @endforeach
                 </nav>
             </div>
-            <details class="relative shrink-0">
-                <summary class="flex cursor-pointer list-none items-center gap-1 rounded-xl bg-soft px-3 py-1.5 text-sm font-semibold [&::-webkit-details-marker]:hidden">
-                    <span class="max-w-40 truncate">{{ $user->name }}</span>
-                    <svg viewBox="0 0 16 16" class="h-3.5 w-3.5" aria-hidden="true"><path d="M3.5 6 8 10.5 12.5 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
-                </summary>
-                <div class="absolute right-0 z-30 mt-1 w-56 rounded-xl border border-line bg-card p-1 shadow">
-                    <a href="{{ route('forex.market-watch') }}" class="block rounded-lg px-3 py-2 text-sm hover:bg-soft">Trade Terminal</a>
-                    <a href="{{ route('personal-vault') }}" class="block rounded-lg px-3 py-2 text-sm hover:bg-soft">Personal wallet</a>
-                    <form method="POST" action="{{ route('logout') }}">
-                        @csrf
-                        <button type="submit" class="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-soft">Log out</button>
-                    </form>
-                </div>
-            </details>
+            <div class="flex shrink-0 items-center gap-2">
+                <x-ai-status :status="$aiStatus" :linked="$user->isSuperAdmin()" />
+                <details class="relative shrink-0">
+                    <summary class="flex cursor-pointer list-none items-center gap-1 rounded-xl bg-soft px-3 py-1.5 text-sm font-semibold [&::-webkit-details-marker]:hidden">
+                        <span class="max-w-40 truncate">{{ $user->name }}</span>
+                        <svg viewBox="0 0 16 16" class="h-3.5 w-3.5" aria-hidden="true"><path d="M3.5 6 8 10.5 12.5 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                    </summary>
+                    <div class="absolute right-0 z-30 mt-1 w-56 rounded-xl border border-line bg-card p-2 shadow">
+                        <x-mode-switch class="w-full" />
+                        <form method="POST" action="{{ route('logout') }}" class="mt-1">
+                            @csrf
+                            <button type="submit" class="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-soft">Log out</button>
+                        </form>
+                    </div>
+                </details>
+            </div>
         </header>
 
         <div class="flex min-h-0 flex-1">
@@ -228,6 +370,7 @@
                         $submenuItems = array_values(array_filter([
                             ['route' => 'forex.watch', 'label' => 'Market Watch', 'active' => 'forex.watch'],
                             ['route' => 'forex.market-watch', 'label' => 'Trade Terminal', 'active' => 'forex.market-watch*'],
+                            ['route' => 'forex.calendar', 'label' => 'Calendar', 'active' => 'forex.calendar'],
                             $user->isSuperAdmin() ? ['route' => 'forex.client-accounts', 'label' => 'Client accounts', 'active' => 'forex.client-accounts*'] : null,
                             $user->isSuperAdmin() ? ['route' => 'forex.mt5-accounts', 'label' => 'MT5 accounts', 'active' => 'forex.mt5-accounts*'] : null,
                             $user->isSuperAdmin() ? ['route' => 'forex.ledger', 'label' => 'Forex Customer Ledgers', 'active' => 'forex.ledger*'] : null,
@@ -257,6 +400,8 @@
                 <section aria-label="{{ $title }}" class="desk-user-bar flex min-h-12 shrink-0 flex-wrap items-center gap-2 border-b border-line bg-primary px-3 py-1.5 sm:px-6">
                     @if ($heading)
                         <p class="shrink-0 text-sm font-semibold tracking-wide">{{ $title }}</p>
+                    @elseif (isset($filters))
+                        <div class="shrink-0">{{ $filters }}</div>
                     @endif
                     <div class="flex min-w-0 flex-1 flex-wrap items-center justify-center gap-1.5">
                         @isset($meters)
@@ -266,6 +411,9 @@
                     @isset($panel)
                         <div class="flex shrink-0 items-center gap-2">{{ $panel }}</div>
                     @endisset
+                    @if (request()->routeIs('forex.market-watch'))
+                        <x-mode-switch class="shrink-0" />
+                    @endif
                     @if ($accountMenu ?? null)
                         <details class="relative shrink-0">
                             <summary class="flex cursor-pointer list-none items-center gap-1 rounded-xl bg-card px-3 py-1.5 text-sm font-semibold [&::-webkit-details-marker]:hidden">
@@ -305,6 +453,7 @@
             </div>
         </div>
         @stack('windows')
+        @stack('scripts')
         <script>
             const sideRail = document.getElementById('side-rail');
             const sideMenu = document.getElementById('side-menu');

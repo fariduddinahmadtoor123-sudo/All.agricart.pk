@@ -1,4 +1,4 @@
-<x-layouts.shell title="Personal wallet" :user="$user" fit>
+<x-layouts.shell title="Forex Wallet" :user="$user" fit>
     <x-slot:panel>
         <a href="{{ route('forex.market-watch') }}" class="rounded-xl bg-card px-4 py-2 text-sm font-semibold">Trade Terminal</a>
     </x-slot:panel>

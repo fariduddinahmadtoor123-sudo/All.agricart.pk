@@ -17,17 +17,8 @@
 
         <label class="mt-5 block text-sm" for="password">Password</label>
         <div class="relative mt-2">
-            <input id="password" name="password" type="password" required autocomplete="current-password" class="w-full rounded-xl border border-line bg-canvas py-3 pe-12 ps-4">
-            <button type="button" data-password-toggle="password" class="absolute inset-y-0 end-0 grid w-12 place-items-center text-ink/70 hover:text-ink" aria-label="Show password" aria-pressed="false">
-                <svg data-eye-open viewBox="0 0 16 16" class="h-4 w-4" aria-hidden="true">
-                    <path d="M1.5 8s2.5-4.5 6.5-4.5S14.5 8 14.5 8s-2.5 4.5-6.5 4.5S1.5 8 1.5 8Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"></path>
-                    <circle cx="8" cy="8" r="2" fill="none" stroke="currentColor" stroke-width="1.4"></circle>
-                </svg>
-                <svg data-eye-shut viewBox="0 0 16 16" class="h-4 w-4" hidden aria-hidden="true">
-                    <path d="M2 2.5 14 13.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path>
-                    <path d="M6.2 4.1A7.2 7.2 0 0 1 8 3.5c4 0 6.5 4.5 6.5 4.5a11 11 0 0 1-2.1 2.3M4.2 5.7A11 11 0 0 0 1.5 8S4 12.5 8 12.5c.7 0 1.4-.1 2-.3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path>
-                </svg>
-            </button>
+            <input id="password" name="password" type="password" required autocomplete="current-password" class="w-full rounded-xl border border-line bg-canvas py-3 pr-12 pl-4">
+            <x-password-eye input="password" />
         </div>
 
         <div class="mt-5 flex flex-wrap items-center justify-between gap-3 text-sm">

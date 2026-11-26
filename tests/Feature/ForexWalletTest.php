@@ -25,7 +25,7 @@ class ForexWalletTest extends TestCase
         $this->actingAs($trader)
             ->get(route('personal-vault'))
             ->assertOk()
-            ->assertSee('Personal wallet')
+            ->assertSee('Forex Wallet')
             ->assertSee('Trade Terminal')
             ->assertSee('Sara Trader')
             ->assertSee('To wallet')
