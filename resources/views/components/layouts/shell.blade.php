@@ -217,6 +217,7 @@
                     $submenuGroup = match (true) {
                         request()->routeIs('settings', 'roles*', 'colors*') => 'settings',
                         request()->routeIs('notes*') => 'docs',
+                        request()->routeIs('contacts', 'contacts.*') => 'contacts',
                         request()->routeIs('forex*') => 'forex',
                         default => 'home',
                     };
@@ -227,6 +228,13 @@
                         ],
                         'docs' => [
                             ['route' => 'notes', 'label' => 'Notes', 'active' => 'notes*'],
+                        ],
+                        'contacts' => [
+                            ['route' => 'contacts', 'label' => 'Overview', 'active' => 'contacts'],
+                            ['route' => 'contacts.suppliers', 'label' => 'Suppliers', 'active' => 'contacts.suppliers'],
+                            ['route' => 'contacts.customers', 'label' => 'Customers', 'active' => 'contacts.customers'],
+                            ['route' => 'contacts.carriers', 'label' => 'Carriers', 'active' => 'contacts.carriers'],
+                            ['route' => 'contacts.message-templates', 'label' => 'Message templates', 'active' => 'contacts.message-templates'],
                         ],
                         'forex' => array_values(array_filter([
                             ['route' => 'forex.watch', 'label' => 'Market Watch', 'active' => 'forex.watch'],

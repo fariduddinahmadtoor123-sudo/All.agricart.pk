@@ -8,6 +8,7 @@ return [
     'route' => 'contacts',
     'patterns' => [
         'contacts',
+        'contacts.*',
     ],
     'soon' => false,
     'provider' => ContactsServiceProvider::class,

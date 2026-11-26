@@ -27,7 +27,7 @@ class DeskMenu
         }
 
         foreach (self::items() as $item) {
-            if ($item['route'] !== $name || in_array($item['key'], ['dashboard', 'forex', 'settings', 'docs'], true)) {
+            if ($item['route'] !== $name || in_array($item['key'], ['dashboard', 'forex', 'settings', 'docs', 'contacts'], true)) {
                 continue;
             }
 
