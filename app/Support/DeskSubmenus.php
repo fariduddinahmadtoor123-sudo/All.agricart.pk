@@ -236,7 +236,7 @@ class DeskSubmenus
                     ['route' => 'settings.permissions', 'label' => 'Permissions', 'path' => '/settings/permissions', 'title' => 'Permissions', 'super' => true],
                     ['route' => 'settings.media', 'label' => 'Media library', 'path' => '/settings/media', 'title' => 'Media library', 'super' => true],
                     ['route' => 'settings.store', 'label' => 'Store settings', 'path' => '/settings/store', 'title' => 'Store settings', 'super' => true],
-                    ['route' => 'settings.printing', 'label' => 'Printing', 'path' => '/settings/printing', 'title' => 'Printing settings', 'super' => true],
+                    ['route' => 'settings.printing', 'label' => 'Printing', 'built' => true, 'super' => true],
                     ['route' => 'settings.tax', 'label' => 'Tax system', 'path' => '/settings/tax', 'title' => 'Tax system', 'super' => true],
                     ['route' => 'settings.backups', 'label' => 'Backups', 'path' => '/settings/backups', 'title' => 'Backups', 'super' => true],
                     ['route' => 'settings.activity', 'label' => 'Activity', 'path' => '/settings/activity', 'title' => 'Activity', 'super' => true],
