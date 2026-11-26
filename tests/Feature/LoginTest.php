@@ -16,6 +16,8 @@ class LoginTest extends TestCase
             ->assertOk()
             ->assertSee('Log in')
             ->assertSee('Sign in and Home opens.')
+            ->assertSee('Forgot password?')
+            ->assertSee('Remember me')
             ->assertDontSee('admin@gmail.com')
             ->assertDontSee('value="admin"', false);
     }
