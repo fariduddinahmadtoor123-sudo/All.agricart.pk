@@ -80,6 +80,18 @@
                             ['label' => 'Docs'],
                             ['label' => 'Notes'],
                         ],
+                        request()->routeIs('settings.ai-logs') => [
+                            ['label' => 'Settings', 'route' => 'settings'],
+                            ['label' => 'AI logs'],
+                        ],
+                        request()->routeIs('settings.ai', 'settings.ai.models', 'settings.ai.store', 'settings.ai.test', 'settings.ai.pause', 'settings.ai.resume') => [
+                            ['label' => 'Settings', 'route' => 'settings'],
+                            ['label' => 'AI settings'],
+                        ],
+                        request()->routeIs('settings.printing*') => [
+                            ['label' => 'Settings', 'route' => 'settings'],
+                            ['label' => 'Printing'],
+                        ],
                         request()->routeIs('settings') => [
                             ['label' => 'Settings'],
                         ],
