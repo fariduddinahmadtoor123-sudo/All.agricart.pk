@@ -27,14 +27,16 @@ class DeskSubmenusTest extends TestCase
 
         $this->actingAs($user)->get('/settings')
             ->assertOk()
-            ->assertSee('AI settings')
+            ->assertSee('AI Connection')
             ->assertSee('Roles')
-            ->assertSee('Appearance');
+            ->assertSee('Appearance')
+            ->assertDontSee('AI logs', false);
 
         $this->actingAs($user)->get('/settings/ai')
             ->assertOk()
-            ->assertSee('AI settings')
-            ->assertSee('Menu shell only');
+            ->assertSee('AI Connection')
+            ->assertSee('Connect')
+            ->assertSee('Recent activity');
 
         $this->actingAs($user)->get('/contacts/online-customers')
             ->assertOk()

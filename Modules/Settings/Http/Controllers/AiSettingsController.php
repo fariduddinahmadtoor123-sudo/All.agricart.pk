@@ -4,6 +4,7 @@ namespace Modules\Settings\Http\Controllers;
 
 use App\Enums\AiProvider;
 use App\Http\Controllers\Controller;
+use App\Models\AiLog;
 use App\Support\Ai\AiConfigurationService;
 use App\Support\Ai\AiProviderRegistry;
 use Illuminate\Http\RedirectResponse;
@@ -26,6 +27,7 @@ class AiSettingsController extends Controller
             'configuration' => $active,
             'providers' => $registry->providerOptions(),
             'models' => $configurations->cachedModelsFor((int) $user->id),
+            'logs' => AiLog::query()->latest('id')->limit(50)->get(),
         ]);
     }
 

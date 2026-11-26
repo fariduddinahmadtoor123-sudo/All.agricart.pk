@@ -22,10 +22,11 @@ class AiSettingsTest extends TestCase
 
         $this->actingAs($user)->get('/settings/ai')
             ->assertOk()
-            ->assertSee('AI settings')
+            ->assertSee('AI Connection')
             ->assertSee('OpenRouter')
             ->assertSee('Load models')
-            ->assertSee('Save & test', false);
+            ->assertSee('Connect')
+            ->assertSee('Recent activity');
     }
 
     public function test_models_can_be_loaded_from_openrouter(): void
@@ -97,10 +98,14 @@ class AiSettingsTest extends TestCase
             'model_id' => 'openai/gpt-4o-mini',
         ]);
 
-        $this->actingAs($user)->get('/settings/ai-logs')
+        $this->actingAs($user)->get('/settings/ai')
             ->assertOk()
             ->assertSee('Connection test')
-            ->assertSee('GPT-4o Mini');
+            ->assertSee('GPT-4o Mini')
+            ->assertSee('Recent activity');
+
+        $this->actingAs($user)->get('/settings/ai-logs')
+            ->assertRedirect('/settings/ai#activity');
     }
 
     public function test_desk_ai_ask_uses_saved_configuration_and_logs(): void
