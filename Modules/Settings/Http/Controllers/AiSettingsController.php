@@ -61,7 +61,10 @@ class AiSettingsController extends Controller
             ]);
         }
 
-        return back()->withInput()->with('status', count($models).' models loaded from OpenRouter. Pick one and save.');
+        return back()
+            ->withInput()
+            ->with('ai_window', true)
+            ->with('status', count($models).' models loaded from OpenRouter. Pick one and connect.');
     }
 
     public function store(Request $request, AiConfigurationService $configurations): RedirectResponse
