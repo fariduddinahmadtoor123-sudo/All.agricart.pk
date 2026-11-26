@@ -8,6 +8,7 @@ return [
     'route' => 'store',
     'patterns' => [
         'store',
+        'store.*',
     ],
     'soon' => false,
     'provider' => StoreServiceProvider::class,

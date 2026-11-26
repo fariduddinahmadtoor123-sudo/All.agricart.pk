@@ -8,6 +8,7 @@ return [
     'route' => 'logistics',
     'patterns' => [
         'logistics',
+        'logistics.*',
     ],
     'soon' => false,
     'provider' => LogisticsServiceProvider::class,

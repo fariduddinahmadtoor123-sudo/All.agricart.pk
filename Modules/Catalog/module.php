@@ -8,6 +8,7 @@ return [
     'route' => 'catalog',
     'patterns' => [
         'catalog',
+        'catalog.*',
     ],
     'soon' => false,
     'provider' => CatalogServiceProvider::class,

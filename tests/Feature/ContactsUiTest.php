@@ -28,6 +28,7 @@ class ContactsUiTest extends TestCase
             ->assertSee('Overview')
             ->assertSee('Suppliers')
             ->assertSee('Customers')
+            ->assertSee('Online customers')
             ->assertSee('Carriers')
             ->assertSee('Message templates')
             ->assertSee('UI preview from the old Agricart Contacts cluster');

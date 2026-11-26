@@ -8,6 +8,7 @@ return [
     'route' => 'external-apps',
     'patterns' => [
         'external-apps',
+        'external-apps.*',
     ],
     'soon' => false,
     'provider' => ExternalAppsServiceProvider::class,

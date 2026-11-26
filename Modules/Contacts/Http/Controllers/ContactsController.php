@@ -23,7 +23,13 @@ class ContactsController extends Controller
                     'label' => 'Customers',
                     'route' => 'contacts.customers',
                     'count' => 0,
-                    'hint' => 'Online and offline buyers',
+                    'hint' => 'Offline / local buyers',
+                ],
+                [
+                    'label' => 'Online customers',
+                    'route' => 'contacts.online-customers',
+                    'count' => 0,
+                    'hint' => 'Store login buyers',
                 ],
                 [
                     'label' => 'Carriers',

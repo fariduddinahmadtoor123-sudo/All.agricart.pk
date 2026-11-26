@@ -8,6 +8,8 @@ return [
     'route' => 'notes',
     'patterns' => [
         'notes*',
+        'docs',
+        'docs.*',
     ],
     'soon' => false,
     'provider' => DocsServiceProvider::class,

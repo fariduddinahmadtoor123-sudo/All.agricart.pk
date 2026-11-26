@@ -8,6 +8,7 @@ return [
     'route' => 'personal-vault',
     'patterns' => [
         'personal-vault',
+        'personal-vault.*',
     ],
     'soon' => false,
     'provider' => PersonalVaultServiceProvider::class,

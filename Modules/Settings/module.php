@@ -8,6 +8,7 @@ return [
     'route' => 'settings',
     'patterns' => [
         'settings',
+        'settings.*',
         'roles*',
         'colors*',
     ],

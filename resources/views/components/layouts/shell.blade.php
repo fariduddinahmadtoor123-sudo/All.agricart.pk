@@ -214,42 +214,24 @@
 
             <div class="flex min-w-0 flex-1 flex-col">
                 @php
-                    $submenuGroup = match (true) {
-                        request()->routeIs('settings', 'roles*', 'colors*') => 'settings',
-                        request()->routeIs('notes*') => 'docs',
-                        request()->routeIs('contacts', 'contacts.*') => 'contacts',
-                        request()->routeIs('forex*') => 'forex',
-                        default => 'home',
-                    };
-                    $submenus = [
-                        'settings' => [
-                            ['route' => 'roles', 'label' => 'Roles', 'active' => 'roles*'],
-                            ['route' => 'colors', 'label' => 'Appearance', 'active' => 'colors*'],
-                        ],
-                        'docs' => [
-                            ['route' => 'notes', 'label' => 'Notes', 'active' => 'notes*'],
-                        ],
-                        'contacts' => [
-                            ['route' => 'contacts', 'label' => 'Overview', 'active' => 'contacts'],
-                            ['route' => 'contacts.suppliers', 'label' => 'Suppliers', 'active' => 'contacts.suppliers'],
-                            ['route' => 'contacts.customers', 'label' => 'Customers', 'active' => 'contacts.customers'],
-                            ['route' => 'contacts.carriers', 'label' => 'Carriers', 'active' => 'contacts.carriers'],
-                            ['route' => 'contacts.message-templates', 'label' => 'Message templates', 'active' => 'contacts.message-templates'],
-                        ],
-                        'forex' => array_values(array_filter([
+                    $submenuItems = \App\Support\DeskSubmenus::itemsForRequest();
+
+                    if ($submenuItems === [] && request()->routeIs('forex*')) {
+                        $submenuItems = array_values(array_filter([
                             ['route' => 'forex.watch', 'label' => 'Market Watch', 'active' => 'forex.watch'],
                             ['route' => 'forex.market-watch', 'label' => 'Trade Terminal', 'active' => 'forex.market-watch*'],
                             $user->isSuperAdmin() ? ['route' => 'forex.client-accounts', 'label' => 'Client accounts', 'active' => 'forex.client-accounts*'] : null,
                             $user->isSuperAdmin() ? ['route' => 'forex.mt5-accounts', 'label' => 'MT5 accounts', 'active' => 'forex.mt5-accounts*'] : null,
                             $user->isSuperAdmin() ? ['route' => 'forex.ledger', 'label' => 'Forex Customer Ledgers', 'active' => 'forex.ledger*'] : null,
                             $user->isSuperAdmin() ? ['route' => 'forex.payments', 'label' => 'Forex Pending Payments', 'active' => 'forex.payments*'] : null,
-                        ])),
-                    ];
+                        ]));
+                    }
                 @endphp
+                @if ($submenuItems !== [])
                 <section aria-label="Menu" class="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-soft px-3 py-2 sm:px-6">
                     <x-section-tag number="2" name="Menu" />
                     <nav aria-label="Submenu" class="flex flex-wrap gap-2">
-                        @foreach ($submenus[$submenuGroup] ?? [] as $item)
+                        @foreach ($submenuItems as $item)
                             <a
                                 href="{{ route($item['route']) }}"
                                 @class([
@@ -262,6 +244,7 @@
                         @endforeach
                     </nav>
                 </section>
+                @endif
 
                 <section aria-label="{{ $title }}" class="desk-user-bar flex min-h-12 shrink-0 flex-wrap items-center gap-2 border-b border-line bg-primary px-3 py-1.5 sm:px-6">
                     @if ($heading)

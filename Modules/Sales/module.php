@@ -8,6 +8,7 @@ return [
     'route' => 'sales',
     'patterns' => [
         'sales',
+        'sales.*',
     ],
     'soon' => false,
     'provider' => SalesServiceProvider::class,

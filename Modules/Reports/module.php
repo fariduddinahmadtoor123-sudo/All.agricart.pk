@@ -8,6 +8,7 @@ return [
     'route' => 'reports',
     'patterns' => [
         'reports',
+        'reports.*',
     ],
     'soon' => false,
     'provider' => ReportsServiceProvider::class,

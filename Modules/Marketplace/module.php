@@ -8,6 +8,7 @@ return [
     'route' => 'marketplace',
     'patterns' => [
         'marketplace',
+        'marketplace.*',
     ],
     'soon' => false,
     'provider' => MarketplaceServiceProvider::class,

@@ -8,6 +8,7 @@ return [
     'route' => 'approvals',
     'patterns' => [
         'approvals',
+        'approvals.*',
     ],
     'soon' => false,
     'provider' => ApprovalsServiceProvider::class,

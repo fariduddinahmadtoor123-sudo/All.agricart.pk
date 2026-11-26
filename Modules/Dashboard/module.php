@@ -8,6 +8,7 @@ return [
     'route' => 'dashboard',
     'patterns' => [
         'dashboard',
+        'dashboard.*',
     ],
     'soon' => false,
     'provider' => DashboardServiceProvider::class,

@@ -8,6 +8,7 @@ return [
     'route' => 'staff',
     'patterns' => [
         'staff',
+        'staff.*',
     ],
     'soon' => false,
     'provider' => StaffServiceProvider::class,

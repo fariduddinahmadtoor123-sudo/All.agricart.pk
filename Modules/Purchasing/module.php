@@ -8,6 +8,7 @@ return [
     'route' => 'purchasing',
     'patterns' => [
         'purchasing',
+        'purchasing.*',
     ],
     'soon' => false,
     'provider' => PurchasingServiceProvider::class,
