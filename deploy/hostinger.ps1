@@ -61,7 +61,18 @@ finally {
     Pop-Location
 }
 
-scp -o StrictHostKeyChecking=accept-new -P 65002 $archive u262659235@145.79.25.63:apps/desk-release.tar
+$sshArgs = @(
+    '-o', 'StrictHostKeyChecking=accept-new',
+    '-o', 'IPQoS=none',
+    '-o', 'ConnectTimeout=30',
+    '-o', 'ServerAliveInterval=15',
+    '-o', 'ServerAliveCountMax=20'
+)
+# Hostinger drops the sftp channel that scp uses, so the archive goes over ssh stdin.
+cmd.exe /c "ssh $($sshArgs -join ' ') -p 65002 u262659235@145.79.25.63 `"cat > apps/desk-release.tar`" < `"$archive`""
+if ($LASTEXITCODE -ne 0) {
+    throw "Upload failed."
+}
 
 $remote = @'
 set -e
@@ -98,14 +109,12 @@ rm -f "$HOME/apps/desk-remote.sh"
 echo DEPLOYED
 '@
 
-$remotePath = Join-Path $env:TEMP 'desk-remote.sh'
-[IO.File]::WriteAllText($remotePath, ($remote -replace "`r", ""), [Text.UTF8Encoding]::new($false))
-scp -o StrictHostKeyChecking=accept-new -P 65002 $remotePath u262659235@145.79.25.63:apps/desk-remote.sh
-ssh -o StrictHostKeyChecking=accept-new -p 65002 u262659235@145.79.25.63 "bash apps/desk-remote.sh"
+$remoteBody = $remote -replace "`r", ""
+$payload = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($remoteBody))
+ssh @sshArgs -p 65002 u262659235@145.79.25.63 "echo $payload | base64 -d | bash"
 if ($LASTEXITCODE -ne 0) {
     throw "Deploy failed."
 }
-Remove-Item $remotePath -Force -ErrorAction SilentlyContinue
 Remove-Item $ask -Force -ErrorAction SilentlyContinue
 Remove-Item $archive -Force -ErrorAction SilentlyContinue
 Write-Host "Desk is on https://desk.agricart.pk"
